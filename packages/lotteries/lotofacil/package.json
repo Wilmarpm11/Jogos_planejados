@@ -1,0 +1,10 @@
+{
+  "name": "@boloes/lottery-lotofacil",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@boloes/lottery-contracts": "0.1.0"
+  }
+}

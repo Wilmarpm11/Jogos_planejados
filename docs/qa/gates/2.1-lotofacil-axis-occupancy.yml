@@ -1,0 +1,19 @@
+schema: 1
+story: "2.1"
+gate: PASS
+status_reason: "A métrica calcula ocupação e desvios exatos para 15–20 dezenas, enumera cada universo sem amostragem e mantém a raridade como informação sem filtro implícito de geração."
+reviewer: "Quinn"
+reviewed_revision: "worktree:3c24fccfeacf3e306b0ee68440885d9dd8fc19a7c9be3df437805f852f8258c2"
+updated: "2026-08-29T20:57:20Z"
+top_issues: []
+waiver:
+  active: false
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (15 tests)"
+    - "CLI occupancy command: PASS"
+    - "git diff --check: PASS"
+  limitations:
+    - "CodeRabbit CLI is not installed in this environment; manual review found no critical or high issue."

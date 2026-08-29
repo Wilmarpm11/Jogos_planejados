@@ -15,7 +15,8 @@
     "paths": {
       "@boloes/domain-core": ["packages/domain-core/src/index.ts"],
       "@boloes/lottery-contracts": ["packages/lottery-contracts/src/index.ts"],
-      "@boloes/data-access": ["packages/data-access/src/index.ts"]
+      "@boloes/data-access": ["packages/data-access/src/index.ts"],
+      "@boloes/lottery-lotofacil": ["packages/lotteries/lotofacil/src/index.ts"]
     }
   }
 }
