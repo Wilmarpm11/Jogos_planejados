@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "noUncheckedIndexedAccess": true,
+    "types": ["node", "vitest/globals"],
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@boloes/domain-core": ["packages/domain-core/src/index.ts"],
+      "@boloes/lottery-contracts": ["packages/lottery-contracts/src/index.ts"],
+      "@boloes/data-access": ["packages/data-access/src/index.ts"]
+    }
+  }
+}

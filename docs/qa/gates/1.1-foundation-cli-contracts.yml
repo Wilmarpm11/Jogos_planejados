@@ -1,0 +1,21 @@
+schema: 1
+story: "1.1"
+gate: PASS
+status_reason: "A fundação atende os critérios de aceite, mantém histórico fora do contrato de geração e passou todos os gates automatizados disponíveis."
+reviewer: "Quinn"
+reviewed_revision: "4179ffd+working-tree-2026-08-29"
+updated: "2026-08-29T16:49:00Z"
+top_issues: []
+waiver:
+  active: false
+evidence:
+  - "npm ci"
+  - "npm run lint"
+  - "npm run typecheck"
+  - "npm test (2 arquivos, 4 testes)"
+  - "npm run cli -- --help"
+  - "npm run cli -- diagnose --db /private/tmp/boloes-foundation-check.sqlite"
+  - "git diff --check"
+notes:
+  - "CodeRabbit CLI não está instalado no ambiente; a revisão automática não foi executada."
+  - "SQLite usa better-sqlite3 estável; node:sqlite experimental não foi mantido."

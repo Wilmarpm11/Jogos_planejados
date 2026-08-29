@@ -1,0 +1,10 @@
+{
+  "name": "@boloes/data-access",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  }
+}
