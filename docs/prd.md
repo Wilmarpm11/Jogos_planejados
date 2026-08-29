@@ -301,6 +301,28 @@ auxiliary_constraints:
 
 No modo neutro, columns e rows são nulos.
 
+#### Baseline auxiliar de auditoria para cartelas simples de 15
+
+Além da raridade teórica configurável, a Lotofácil mantém uma política auxiliar
+versionada de leitura operacional para apostas simples de 15. Ela não substitui
+percentis teóricos, não altera E1–E10, não soma em `extreme_count` e não
+rejeita jogos:
+
+| Ocupação no mesmo eixo | Sinal auxiliar |
+| --- | --- |
+| duas ou mais posições com exatamente uma dezena | ATTENTION |
+| uma posição vazia | RARE |
+| duas ou mais posições vazias | VERY_RARE |
+
+A prioridade é `VERY_RARE -> RARE -> ATTENTION -> NONE`. O sinal é exposto
+separadamente para linhas e colunas. Uma posição com apenas uma dezena não gera
+sinal por si só.
+
+Referência histórica de auditoria para colunas de apostas simples de 15:
+alguma coluna com uma dezena = 29,58%; exatamente duas colunas com uma dezena =
+0,72%; alguma coluna vazia = 2,12%; duas colunas vazias não foram observadas na
+base analisada. Esses percentuais não são transferidos para apostas 16–20.
+
 ### 7.2 Regras E1-E10
 
 | Regra | Extremo |
@@ -313,8 +335,8 @@ No modo neutro, columns e rows são nulos.
 | E6 | maior sequência <=2 ou >=9 |
 | E7 | sequências <=1 ou >=7 |
 | E8 | amplitude <=18 |
-| E9 | desvio normalizado de linhas ou limiar teórico específico de bet_size |
-| E10 | desvio normalizado de colunas ou limiar teórico específico de bet_size |
+| E9 | para 15: desvio de linhas >=8; para 16–20: não aplicável até estudo teórico específico |
+| E10 | para 15: desvio de colunas >=8; para 16–20: não aplicável até estudo teórico específico |
 
 Para apostas de 15 dezenas, a referência histórica de desvio absoluto pode ser
 mantida somente como âncora equivalente a um limiar normalizado versionado. Ela

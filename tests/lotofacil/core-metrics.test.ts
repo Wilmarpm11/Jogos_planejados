@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyLotofacilStructuralProfile,
   calculateLotofacilMetricProfile,
   LOTOFACIL_BORDER_NUMBERS,
   LOTOFACIL_CENTER_NUMBERS,
   LOTOFACIL_DEFINITION,
 } from "@boloes/lottery-lotofacil";
 
-const allRuleIds = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8"] as const;
+const allRuleIds = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10"] as const;
+
+function classify(numbers: readonly number[]) {
+  return classifyLotofacilStructuralProfile(calculateLotofacilMetricProfile(numbers));
+}
 
 describe("Lotofácil canonical metrics", () => {
   it("uses the official 25/15 definition and a complete, disjoint 5x5 border", () => {
@@ -59,23 +64,23 @@ describe("Lotofácil canonical metrics", () => {
   });
 
   it("applies every canonical E1–E8 threshold to simple 15-number bets", () => {
-    const e1 = calculateLotofacilMetricProfile([
+    const e1 = classify([
       1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 2, 4, 6, 8,
     ]);
-    const e2 = calculateLotofacilMetricProfile(Array.from({ length: 15 }, (_, index) => index + 1));
-    const e3 = calculateLotofacilMetricProfile([
+    const e2 = classify(Array.from({ length: 15 }, (_, index) => index + 1));
+    const e3 = classify([
       7, 8, 9, 12, 13, 14, 17, 18, 19, 1, 2, 3, 4, 5, 6,
     ]);
-    const e4 = calculateLotofacilMetricProfile([
+    const e4 = classify([
       1, 2, 3, 4, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
     ]);
-    const e5e6 = calculateLotofacilMetricProfile([
+    const e5e6 = classify([
       1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 22, 24,
     ]);
-    const e7 = calculateLotofacilMetricProfile([
+    const e7 = classify([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 17, 19, 21,
     ]);
-    const e8 = calculateLotofacilMetricProfile(Array.from({ length: 15 }, (_, index) => index + 1));
+    const e8 = classify(Array.from({ length: 15 }, (_, index) => index + 1));
 
     expect(e1.extremeRules.E1.isExtreme).toBe(true);
     expect(e2.extremeRules.E2.isExtreme).toBe(true);
@@ -88,54 +93,78 @@ describe("Lotofácil canonical metrics", () => {
   });
 
   it("applies the upper extreme arms of E1–E7 without changing their boundaries", () => {
-    const e1 = calculateLotofacilMetricProfile([
+    const e1Profile = calculateLotofacilMetricProfile([
       2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 1, 3, 5, 7,
     ]);
-    const e2 = calculateLotofacilMetricProfile(Array.from({ length: 15 }, (_, index) => index + 11));
-    const e3 = calculateLotofacilMetricProfile([
+    const e2Profile = calculateLotofacilMetricProfile(Array.from({ length: 15 }, (_, index) => index + 11));
+    const e3Profile = calculateLotofacilMetricProfile([
       1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 7,
     ]);
-    const e4 = calculateLotofacilMetricProfile([
+    const e4Profile = calculateLotofacilMetricProfile([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16,
     ]);
-    const e5 = calculateLotofacilMetricProfile([
+    const e5Profile = calculateLotofacilMetricProfile([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17,
     ]);
-    const e6 = calculateLotofacilMetricProfile([
+    const e6Profile = calculateLotofacilMetricProfile([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16,
     ]);
-    const e7 = calculateLotofacilMetricProfile([
+    const e7Profile = calculateLotofacilMetricProfile([
       1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22,
     ]);
 
-    expect(e1.metrics.evenCount).toBe(11);
-    expect(e1.extremeRules.E1.isExtreme).toBe(true);
-    expect(e2.metrics.sum).toBe(270);
-    expect(e2.extremeRules.E2.isExtreme).toBe(true);
-    expect(e3.metrics.borderCount).toBe(14);
-    expect(e3.extremeRules.E3.isExtreme).toBe(true);
-    expect(e4.metrics.lowCount).toBe(12);
-    expect(e4.extremeRules.E4.isExtreme).toBe(true);
-    expect(e5.metrics.consecutivePairCount).toBe(12);
-    expect(e5.extremeRules.E5.isExtreme).toBe(true);
-    expect(e6.metrics.maxConsecutiveRun).toBe(9);
-    expect(e6.extremeRules.E6.isExtreme).toBe(true);
-    expect(e7.metrics.sequenceCount).toBe(7);
-    expect(e7.extremeRules.E7.isExtreme).toBe(true);
+    expect(e1Profile.metrics.evenCount).toBe(11);
+    expect(classifyLotofacilStructuralProfile(e1Profile).extremeRules.E1.isExtreme).toBe(true);
+    expect(e2Profile.metrics.sum).toBe(270);
+    expect(classifyLotofacilStructuralProfile(e2Profile).extremeRules.E2.isExtreme).toBe(true);
+    expect(e3Profile.metrics.borderCount).toBe(14);
+    expect(classifyLotofacilStructuralProfile(e3Profile).extremeRules.E3.isExtreme).toBe(true);
+    expect(e4Profile.metrics.lowCount).toBe(12);
+    expect(classifyLotofacilStructuralProfile(e4Profile).extremeRules.E4.isExtreme).toBe(true);
+    expect(e5Profile.metrics.consecutivePairCount).toBe(12);
+    expect(classifyLotofacilStructuralProfile(e5Profile).extremeRules.E5.isExtreme).toBe(true);
+    expect(e6Profile.metrics.maxConsecutiveRun).toBe(9);
+    expect(classifyLotofacilStructuralProfile(e6Profile).extremeRules.E6.isExtreme).toBe(true);
+    expect(e7Profile.metrics.sequenceCount).toBe(7);
+    expect(classifyLotofacilStructuralProfile(e7Profile).extremeRules.E7.isExtreme).toBe(true);
   });
 
   it("returns metrics but makes E1–E8 explicitly non-applicable for larger bets", () => {
     const profile = calculateLotofacilMetricProfile(
       Array.from({ length: 16 }, (_, index) => index + 1),
     );
+    const classification = classifyLotofacilStructuralProfile(profile);
 
     expect(profile.metrics.sum).toBe(136);
     for (const ruleId of allRuleIds) {
-      expect(profile.extremeRules[ruleId]).toEqual({
+      expect(classification.extremeRules[ruleId]).toEqual({
         applicable: false,
         isExtreme: null,
       });
     }
+  });
+
+  it("separates E9/E10 extremes from auxiliary 15-number occupancy signals", () => {
+    const e9 = classify(Array.from({ length: 15 }, (_, index) => index + 1));
+    const e10 = classify([1, 2, 3, 4, 6, 7, 8, 11, 12, 13, 16, 17, 18, 21, 22]);
+    const attention = classify([1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 16, 17, 18, 21]);
+    const veryRare = classify([1, 2, 3, 6, 7, 8, 11, 12, 13, 16, 17, 18, 21, 22, 23]);
+
+    expect(e9.extremeRules.E9.isExtreme).toBe(true);
+    expect(e9.extremeRules.E10.isExtreme).toBe(false);
+    expect(e10.extremeRules.E10.isExtreme).toBe(true);
+    expect(attention.auxiliaryAxisSignals.columns).toEqual({
+      applicable: true,
+      signal: "ATTENTION",
+    });
+    expect(e10.auxiliaryAxisSignals.columns).toEqual({
+      applicable: true,
+      signal: "RARE",
+    });
+    expect(veryRare.auxiliaryAxisSignals.columns).toEqual({
+      applicable: true,
+      signal: "VERY_RARE",
+    });
   });
 
   it.each([15, 16, 17, 18, 19, 20])(

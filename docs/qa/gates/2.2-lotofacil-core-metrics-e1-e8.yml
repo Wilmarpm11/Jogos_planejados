@@ -1,10 +1,10 @@
 schema: 1
 story: "2.2"
 gate: PASS
-status_reason: "O MetricEngine Lotofácil calcula as métricas canônicas para 15–20 dezenas e aplica E1–E8 somente onde os limiares canônicos são válidos: cartelas simples de 15."
+status_reason: "O MetricEngine calcula métricas puras para 15–20; o StructuralClassifier aplica E1–E10 apenas a 15 e expõe sinais auxiliares sem influenciar extremo, geração ou histórico."
 reviewer: "Quinn"
-reviewed_revision: "worktree:723c4184c6c9d31abe583b02de2f20e747166860e907b67127f385d786ef88a3"
-updated: "2026-08-29T21:05:03Z"
+reviewed_revision: "worktree:9597a090581d3ae70f3fcaea79a10ef9ca3e24286c33364a0f4b2db062a854aa"
+updated: "2026-08-29T21:18:33Z"
 top_issues: []
 waiver:
   active: false
@@ -12,8 +12,11 @@ review_notes:
   automated_checks:
     - "npm run lint: PASS"
     - "npm run typecheck: PASS"
-    - "npm test: PASS (27 tests)"
+    - "npm test: PASS (28 tests)"
     - "CLI metrics command: PASS"
     - "git diff --check: PASS"
   limitations:
     - "CodeRabbit CLI is not installed in this environment; manual review found no critical or high issue."
+  amendment:
+    - "E9/E10 use deviation >= 8 only for simple 15-number bets."
+    - "Auxiliary axis signals remain outside E1–E10 and extreme_count."

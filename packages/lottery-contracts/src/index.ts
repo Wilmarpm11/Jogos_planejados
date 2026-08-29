@@ -169,3 +169,11 @@ export interface StructuralRuleFlag {
   readonly applicable: boolean;
   readonly isExtreme: boolean | null;
 }
+
+/**
+ * Applies only the structural rules valid for a metric profile. It must not
+ * query history, strategy configuration, generation state, or persistence.
+ */
+export interface StructuralClassifier<Profile, Classification> {
+  classify(profile: Profile): Classification;
+}

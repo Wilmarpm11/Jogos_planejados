@@ -9,6 +9,7 @@ import {
   type RarityThresholds,
   type LotteryDefinition,
   type LotteryMetricEngine,
+  type StructuralClassifier,
   type StructuralRuleFlag,
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
@@ -46,7 +47,37 @@ export interface LotofacilTheoreticalAxisProfile {
   readonly distributions: readonly TheoreticalAxisDistribution[];
 }
 
-export type LotofacilExtremeRuleId = "E1" | "E2" | "E3" | "E4" | "E5" | "E6" | "E7" | "E8";
+export type LotofacilExtremeRuleId =
+  | "E1"
+  | "E2"
+  | "E3"
+  | "E4"
+  | "E5"
+  | "E6"
+  | "E7"
+  | "E8"
+  | "E9"
+  | "E10";
+
+export type LotofacilAxisAuxiliarySignal =
+  | "NONE"
+  | "ATTENTION"
+  | "RARE"
+  | "VERY_RARE";
+
+export interface LotofacilAxisAuxiliaryClassification {
+  readonly applicable: boolean;
+  readonly signal: LotofacilAxisAuxiliarySignal | null;
+}
+
+export interface LotofacilStructuralClassification {
+  readonly classifierVersion: string;
+  readonly extremeRules: Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>>;
+  readonly auxiliaryAxisSignals: Readonly<{
+    rows: LotofacilAxisAuxiliaryClassification;
+    columns: LotofacilAxisAuxiliaryClassification;
+  }>;
+}
 
 export interface LotofacilCoreMetrics {
   readonly evenCount: number;
@@ -69,7 +100,6 @@ export interface LotofacilMetricProfile {
   readonly betSize: LotofacilBetSize;
   readonly metrics: LotofacilCoreMetrics;
   readonly axisOccupancy: LotofacilAxisOccupancyProfile;
-  readonly extremeRules: Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>>;
 }
 
 const cachedTheoreticalProfiles = new Map<LotofacilBetSize, LotofacilTheoreticalAxisProfile>();
@@ -430,14 +460,16 @@ function nonApplicableRules(): Readonly<Record<LotofacilExtremeRuleId, Structura
     E6: { applicable: false, isExtreme: null },
     E7: { applicable: false, isExtreme: null },
     E8: { applicable: false, isExtreme: null },
+    E9: { applicable: false, isExtreme: null },
+    E10: { applicable: false, isExtreme: null },
   };
 }
 
 function extremeRulesForSimpleBet(
   metrics: LotofacilCoreMetrics,
-  betSize: LotofacilBetSize,
+  axisOccupancy: LotofacilAxisOccupancyProfile,
 ): Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>> {
-  if (betSize !== 15) {
+  if (axisOccupancy.betSize !== 15) {
     return nonApplicableRules();
   }
 
@@ -454,7 +486,31 @@ function extremeRulesForSimpleBet(
     E6: rule(metrics.maxConsecutiveRun <= 2 || metrics.maxConsecutiveRun >= 9),
     E7: rule(metrics.sequenceCount <= 1 || metrics.sequenceCount >= 7),
     E8: rule(metrics.amplitude <= 18),
+    E9: rule(axisOccupancy.rows.deviation.numerator >= 8 * axisOccupancy.rows.deviation.denominator),
+    E10: rule(
+      axisOccupancy.columns.deviation.numerator >=
+        8 * axisOccupancy.columns.deviation.denominator,
+    ),
   };
+}
+
+function auxiliaryAxisSignal(
+  occupancy: AxisOccupancy,
+  betSize: LotofacilBetSize,
+): LotofacilAxisAuxiliaryClassification {
+  if (betSize !== 15) {
+    return { applicable: false, signal: null };
+  }
+  if (occupancy.axesWith[0] >= 2) {
+    return { applicable: true, signal: "VERY_RARE" };
+  }
+  if (occupancy.axesWith[0] >= 1) {
+    return { applicable: true, signal: "RARE" };
+  }
+  if (occupancy.axesWith[1] >= 2) {
+    return { applicable: true, signal: "ATTENTION" };
+  }
+  return { applicable: true, signal: "NONE" };
 }
 
 /**
@@ -475,10 +531,33 @@ export function calculateLotofacilMetricProfile(
     betSize,
     metrics,
     axisOccupancy: calculateLotofacilAxisOccupancy(selectedNumbers),
-    extremeRules: extremeRulesForSimpleBet(metrics, betSize),
   };
 }
 
 export const lotofacilMetricEngine: LotteryMetricEngine<LotofacilMetricProfile> = {
   calculate: calculateLotofacilMetricProfile,
+};
+
+/**
+ * Applies Lotofácil rules only after metrics are known. The classifier neither
+ * generates games nor rejects them, and it never reads historical results.
+ */
+export function classifyLotofacilStructuralProfile(
+  profile: LotofacilMetricProfile,
+): LotofacilStructuralClassification {
+  return {
+    classifierVersion: "1.0.0",
+    extremeRules: extremeRulesForSimpleBet(profile.metrics, profile.axisOccupancy),
+    auxiliaryAxisSignals: {
+      rows: auxiliaryAxisSignal(profile.axisOccupancy.rows, profile.betSize),
+      columns: auxiliaryAxisSignal(profile.axisOccupancy.columns, profile.betSize),
+    },
+  };
+}
+
+export const lotofacilStructuralClassifier: StructuralClassifier<
+  LotofacilMetricProfile,
+  LotofacilStructuralClassification
+> = {
+  classify: classifyLotofacilStructuralProfile,
 };

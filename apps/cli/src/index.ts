@@ -2,6 +2,7 @@ import { bootstrapDatabase } from "@boloes/data-access";
 import {
   calculateLotofacilAxisOccupancy,
   calculateLotofacilMetricProfile,
+  classifyLotofacilStructuralProfile,
 } from "@boloes/lottery-lotofacil";
 import { resolve } from "node:path";
 
@@ -56,7 +57,13 @@ if (command === "help" || command === "--help" || command === "-h") {
   } else {
     const numbers = value.split(",").map((part) => Number(part.trim()));
     try {
-      process.stdout.write(JSON.stringify(calculateLotofacilMetricProfile(numbers)) + "\n");
+      const profile = calculateLotofacilMetricProfile(numbers);
+      process.stdout.write(
+        JSON.stringify({
+          profile,
+          structuralClassification: classifyLotofacilStructuralProfile(profile),
+        }) + "\n",
+      );
     } catch (error) {
       process.stderr.write(
         (error instanceof Error ? error.message : "Entrada inválida.") + "\n",
