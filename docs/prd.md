@@ -12,7 +12,8 @@
 | 2026-08-26 | 0.3 | PRD inicial multi-loteria | Produto |
 | 2026-08-29 | 0.4 | Fórmula canônica, histórico versionado, impressão A4 e gates de qualidade | PM / AIOX |
 | 2026-08-29 | 0.4.1 | Parecer final de Architect, PO e QA; gates de produção explicitados | PM / AIOX |
-| 2026-08-29 | 0.4.2 | Removido cenário de teste de 1.350 jogos; fórmula como única referência canônica | PM / AIOX |
+| 2026-08-29 | 0.4.2 | Removidos exemplos de carteira de teste; fórmula como única referência canônica | PM / AIOX |
+| 2026-08-29 | 0.4.3 | Ocupação de linhas/colunas normalizada por tamanho de aposta (15–20) e raridade teórica por universo | PM / AIOX |
 
 ## 1. Objetivo e contexto
 
@@ -100,7 +101,9 @@ parser de resultados, cálculo de cobertura e template de impressão.
 ### FR-02 - Lotofácil
 
 O módulo Lotofácil deve suportar universo 01-25, sorteio de 15, apostas de 15-20,
-grade 5x5, faixas 11-15 e as métricas da seção 7.
+grade 5x5, faixas 11-15 e as métricas da seção 7. A ocupação de linhas/colunas
+é calculada para cada tamanho de aposta, sem reutilizar limites ou probabilidades
+de apostas de 15 dezenas nas apostas maiores.
 
 ### FR-03 - Dados da CAIXA
 
@@ -225,10 +228,78 @@ mas os contratos e invariantes não.
 
 ### 7.1 Métricas
 
-Para cada jogo de 15 dezenas calcular: paridade; soma; quantidade 01-13/14-25;
+Para cada jogo de 15 a 20 dezenas calcular: paridade; soma; quantidade 01-13/14-25;
 moldura/centro 5x5; pares consecutivos; maior sequência; quantidade de sequências
 com 2+ dezenas; amplitude; distribuição e desvio de linhas/colunas; repetição do
 concurso anterior; E1-E10; `extreme_count`; faixa estrutural; núcleo central.
+
+### 7.1.1 Ocupação de linhas e colunas para apostas de 15 a 20 dezenas
+
+Para qualquer cartela válida, calcular ocupação completa:
+
+~~~text
+column_counts = [c1, c2, c3, c4, c5]
+row_counts    = [r1, r2, r3, r4, r5]
+~~~
+
+Também calcular para cada eixo: mínimo, máximo e quantas linhas/colunas possuem
+0, 1, 2, 3, 4 ou 5 dezenas.
+
+O valor esperado por linha ou coluna depende do tamanho da aposta:
+
+~~~text
+expected_per_axis = bet_size / 5
+~~~
+
+Os valores esperados são 3,0 (15), 3,2 (16), 3,4 (17), 3,6 (18), 3,8 (19) e
+4,0 (20). O MetricEngine calcula:
+
+~~~text
+column_deviation = SUM(abs(column_count - expected_per_axis))
+row_deviation    = SUM(abs(row_count - expected_per_axis))
+
+column_deviation_normalized = column_deviation / bet_size
+row_deviation_normalized    = row_deviation / bet_size
+~~~
+
+Regras de extremo e comparações entre tamanhos usam o desvio normalizado ou um
+limite explicitamente configurado por bet_size. É proibido aplicar a referência
+fixa baseada em distância de 3 como regra universal para apostas de 16 a 20.
+
+Colunas e linhas com 0 ou 1 dezena são métricas auxiliares. Uma delas com uma
+dezena não é extrema por regra fixa nem gera rejeição automática. A raridade vem
+da distribuição teórica do universo específico C(25, bet_size).
+
+Para cada bet_size de 15 a 20, o sistema pré-calcula a distribuição teórica de:
+
+~~~text
+columns_with_0, columns_with_1,
+rows_with_0, rows_with_1,
+column_deviation_normalized, row_deviation_normalized
+~~~
+
+Cada evento recebe classificação configurável:
+
+| Classe | Frequência teórica |
+| --- | --- |
+| NORMAL | >= 10% |
+| ATTENTION | >= 2% e < 10% |
+| RARE | >= 0,5% e < 2% |
+| VERY_RARE | < 0,5% |
+
+O modo neutro não aplica restrição auxiliar de linhas/colunas. Uma estratégia
+só pode restringir ocupação ao declarar a classe máxima aceita e o tamanho de
+aposta a que a distribuição se aplica:
+
+~~~yaml
+auxiliary_constraints:
+  columns:
+    max_rarity_class: ATTENTION
+  rows:
+    max_rarity_class: ATTENTION
+~~~
+
+No modo neutro, columns e rows são nulos.
 
 ### 7.2 Regras E1-E10
 
@@ -242,12 +313,20 @@ concurso anterior; E1-E10; `extreme_count`; faixa estrutural; núcleo central.
 | E6 | maior sequência <=2 ou >=9 |
 | E7 | sequências <=1 ou >=7 |
 | E8 | amplitude <=18 |
-| E9 | desvio de linhas >=8 |
-| E10 | desvio de colunas >=8 |
+| E9 | desvio normalizado de linhas ou limiar teórico específico de bet_size |
+| E10 | desvio normalizado de colunas ou limiar teórico específico de bet_size |
+
+Para apostas de 15 dezenas, a referência histórica de desvio absoluto pode ser
+mantida somente como âncora equivalente a um limiar normalizado versionado. Ela
+não pode ser reutilizada como limite absoluto para apostas de 16 a 20 dezenas.
 
 `extreme_count` é a quantidade de regras satisfeitas.
 
 ### 7.3 Massa estrutural neutra
+
+Esta massa é a referência teórica para cartelas simples de 15 dezenas. Para
+apostas de 16 a 20, o sistema deve calcular e versionar a massa correspondente
+ao respectivo universo; nunca deve reutilizar esta tabela.
 
 | Faixa | Massa teórica |
 | --- | ---: |
@@ -300,7 +379,7 @@ mesma carteira; nunca chama o gerador.
 | Épico | Histórias principais |
 | --- | --- |
 | 1. Fundação | app/banco; entidades versionadas; hash/auditoria |
-| 2. Lotofácil | definição 25/15; MetricEngine; E1-E10; núcleo/faixas; universo |
+| 2. Lotofácil | definição 25/15; MetricEngine; E1-E10; ocupação 15–20 normalizada; núcleo/faixas; universo |
 | 3. CAIXA e laboratório | import manual; sync/fallback; catálogo; métricas; lift/coortes; estratégias |
 | 4. Carteira e cobertura | seed; neutral; experimental; pares/interseções; expansão e cobertura |
 | 5. Congelamento | relatório; aprovação/hash; revisão/reimpressão |
@@ -329,7 +408,8 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
 
 - [ ] Congelar em artefato versionado todas as constantes, métricas e massas da
   fórmula Lotofácil, incluindo semântica de pares consecutivos, sequências 2+,
-  moldura, desvios e canonização/ordenação de jogos.
+  moldura, ocupação normalizada de linhas/colunas, desvios e canonização/ordenação
+  de jogos.
 - [ ] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
 - [ ] Congelar URLs, campos, validações, versão do parser e regra de
   correção/substituição da fonte CAIXA, com import manual.

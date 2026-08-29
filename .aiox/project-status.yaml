@@ -2,17 +2,16 @@ status:
   branch: main
   modifiedFiles:
     - .aiox/project-status.yaml
-    - README.md
-    - apps/
     - docs/architecture.md
-    - docs/qa/
-  modifiedFilesTotalCount: 14
+    - docs/prd.md
+  modifiedFilesTotalCount: 3
   recentCommits:
+    - 'feat: add CLI foundation and domain contracts'
     - 'chore: initialize AIOX project foundation'
   currentEpic: null
   currentStory: null
-  lastUpdate: '2026-08-29T16:49:29.488Z'
+  lastUpdate: '2026-08-29T16:53:58.476Z'
   isGitRepo: true
-timestamp: 1788022169492
+timestamp: 1788022438481
 ttl: 60
-gitFingerprint: 1788018569570.6733:1788019164192.3113
+gitFingerprint: 1788018569570.6733:1788022174125.2178

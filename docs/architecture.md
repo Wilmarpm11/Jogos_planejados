@@ -204,7 +204,8 @@ WCAG AA, teclado e estados textuais além de cor.
 ## 13. Ordem de implementação
 
 1. Fundação: workspaces, CLI, contratos, qualidade e SQLite.
-2. Lotofácil: definição, MetricEngine e E1-E10.
+2. Lotofácil: definição, MetricEngine, E1-E10 e ocupação normalizada de
+   linhas/colunas por tamanho de aposta.
 3. Sincronização CAIXA, snapshots e fallback.
 4. Pesquisa, estratégias e validação.
 5. Geração, diversidade, cobertura, auditoria e congelamento.
@@ -216,7 +217,7 @@ WCAG AA, teclado e estados textuais além de cor.
 
 | Área | Evidência obrigatória |
 | --- | --- |
-| Fórmula | contrato versionado e testes de semântica E1-E10 |
+| Fórmula | contrato versionado e testes de semântica E1-E10, ocupação 15–20 e raridade teórica por tamanho |
 | Cobertura | método, limites e precisão documentados/testados |
 | Dados CAIXA | parser, validação, fallback e fixtures |
 | Impressão | template, PDF vetorial e ensaio físico |
