@@ -95,6 +95,7 @@ tests/contracts/               # contratos entre módulos e processos
 | Contrato de modalidade | Criar contrato reutilizável | `lottery-contracts` |
 | Interface do MetricEngine | Criar contrato reutilizável | `lottery-contracts` |
 | Interface do StructuralClassifier | Criar contrato reutilizável | `lottery-contracts` |
+| Resumo estrutural | Criar contrato reutilizável | `lottery-contracts` |
 | Ocupação por eixo e raridade | Criar contrato reutilizável | `lottery-contracts` |
 | Métricas E1-E10 | Módulo específico | `lotteries/lotofacil` |
 | Combinações e cobertura | Criar contrato reutilizável | `combinatorics` / `coverage-engine` |

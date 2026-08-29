@@ -10,7 +10,9 @@ import {
   type LotteryDefinition,
   type LotteryMetricEngine,
   type StructuralClassifier,
+  type StructuralBand,
   type StructuralRuleFlag,
+  type StructuralSummary,
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
 } from "@boloes/lottery-contracts";
@@ -77,6 +79,16 @@ export interface LotofacilStructuralClassification {
     rows: LotofacilAxisAuxiliaryClassification;
     columns: LotofacilAxisAuxiliaryClassification;
   }>;
+}
+
+export interface LotofacilStructuralSummary extends StructuralSummary {
+  readonly centralCoreCriteria: Readonly<{
+    evenCount: boolean;
+    sum: boolean;
+    borderCount: boolean;
+    lowCount: boolean;
+    consecutivePairCount: boolean;
+  }> | null;
 }
 
 export interface LotofacilCoreMetrics {
@@ -561,3 +573,61 @@ export const lotofacilStructuralClassifier: StructuralClassifier<
 > = {
   classify: classifyLotofacilStructuralProfile,
 };
+
+function structuralBand(extremeCount: number): StructuralBand {
+  if (extremeCount === 0) {
+    return "ZERO_EXTREMES";
+  }
+  if (extremeCount === 1) {
+    return "ONE_EXTREME";
+  }
+  if (extremeCount === 2) {
+    return "TWO_EXTREMES";
+  }
+  if (extremeCount === 3) {
+    return "THREE_EXTREMES";
+  }
+  return "FOUR_PLUS_EXTREMES";
+}
+
+/**
+ * Consolidates previously calculated rules. It does not recalculate E1–E10
+ * and auxiliary occupancy signals are deliberately excluded.
+ */
+export function summarizeLotofacilStructuralProfile(
+  profile: LotofacilMetricProfile,
+  classification: LotofacilStructuralClassification,
+): LotofacilStructuralSummary {
+  if (profile.betSize !== 15) {
+    return {
+      applicable: false,
+      extremeCount: null,
+      band: null,
+      isCentralCore: null,
+      centralCoreCriteria: null,
+    };
+  }
+
+  const rules = Object.values(classification.extremeRules);
+  if (rules.some((rule) => !rule.applicable || rule.isExtreme === null)) {
+    throw new Error("A simple Lotofácil bet requires all E1–E10 rules to be applicable.");
+  }
+  const extremeCount = rules.filter((rule) => rule.isExtreme).length;
+  const metrics = profile.metrics;
+  const centralCoreCriteria = {
+    evenCount: metrics.evenCount >= 6 && metrics.evenCount <= 9,
+    sum: metrics.sum >= 176 && metrics.sum <= 214,
+    borderCount: metrics.borderCount >= 8 && metrics.borderCount <= 12,
+    lowCount: metrics.lowCount >= 7 && metrics.lowCount <= 10,
+    consecutivePairCount:
+      metrics.consecutivePairCount >= 7 && metrics.consecutivePairCount <= 10,
+  };
+
+  return {
+    applicable: true,
+    extremeCount,
+    band: structuralBand(extremeCount),
+    isCentralCore: Object.values(centralCoreCriteria).every(Boolean),
+    centralCoreCriteria,
+  };
+}

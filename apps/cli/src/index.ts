@@ -3,6 +3,7 @@ import {
   calculateLotofacilAxisOccupancy,
   calculateLotofacilMetricProfile,
   classifyLotofacilStructuralProfile,
+  summarizeLotofacilStructuralProfile,
 } from "@boloes/lottery-lotofacil";
 import { resolve } from "node:path";
 
@@ -58,10 +59,15 @@ if (command === "help" || command === "--help" || command === "-h") {
     const numbers = value.split(",").map((part) => Number(part.trim()));
     try {
       const profile = calculateLotofacilMetricProfile(numbers);
+      const structuralClassification = classifyLotofacilStructuralProfile(profile);
       process.stdout.write(
         JSON.stringify({
           profile,
-          structuralClassification: classifyLotofacilStructuralProfile(profile),
+          structuralClassification,
+          structuralSummary: summarizeLotofacilStructuralProfile(
+            profile,
+            structuralClassification,
+          ),
         }) + "\n",
       );
     } catch (error) {

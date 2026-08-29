@@ -177,3 +177,17 @@ export interface StructuralRuleFlag {
 export interface StructuralClassifier<Profile, Classification> {
   classify(profile: Profile): Classification;
 }
+
+export type StructuralBand =
+  | "ZERO_EXTREMES"
+  | "ONE_EXTREME"
+  | "TWO_EXTREMES"
+  | "THREE_EXTREMES"
+  | "FOUR_PLUS_EXTREMES";
+
+export interface StructuralSummary {
+  readonly applicable: boolean;
+  readonly extremeCount: number | null;
+  readonly band: StructuralBand | null;
+  readonly isCentralCore: boolean | null;
+}

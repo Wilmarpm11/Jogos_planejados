@@ -1,0 +1,19 @@
+schema: 1
+story: "2.3"
+gate: PASS
+status_reason: "O resumo estrutural consolida E1–E10 somente para cartelas simples de 15, mantém sinais auxiliares separados e não cria regras para 16–20."
+reviewer: "Quinn"
+reviewed_revision: "worktree:ee161b1ac808c5d436e3f0642c5cf7851dd55c6302695817d12c3ead70effc81"
+updated: "2026-08-29T21:35:10Z"
+top_issues: []
+waiver:
+  active: false
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (37 tests)"
+    - "CLI metrics command: PASS"
+    - "git diff --check: PASS"
+  limitations:
+    - "CodeRabbit CLI is not installed in this environment; manual review found no critical or high issue."
