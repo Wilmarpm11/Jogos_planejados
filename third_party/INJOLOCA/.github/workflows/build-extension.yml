@@ -1,0 +1,105 @@
+name: Build INJOLOCA Extension
+
+on:
+  push:
+    branches:
+      - master
+
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Tipo de incremento de versão'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: release   # apenas aprovadores do environment podem executar
+    if: github.ref == 'refs/heads/master'  # somente master
+
+    steps:
+      # 1️⃣ Checkout completo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2️⃣ Setup Node.js para semver
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install semver + jq
+        run: |
+          npm install semver
+          sudo apt-get install -y jq
+
+      # 3️⃣ Bump version seguro (baseado em tags)
+      - name: Bump version
+        id: bump
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          VERSION=${LAST_TAG#v}
+          NEW_VERSION=$(npx semver "$VERSION" -i $BUMP_TYPE)
+
+          echo "Nova versão: $NEW_VERSION"
+
+          jq ".version=\"$NEW_VERSION\"" manifest.json > tmp.json && mv tmp.json manifest.json
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        env:
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+
+      # 4️⃣ Commit + tag
+      - name: Commit new version
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add manifest.json
+          git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}"
+          git tag v${{ steps.bump.outputs.new_version }}
+          git push origin HEAD:master --tags
+
+      # 5️⃣ Criar ZIP da extensão com arquivos essenciais
+      - name: Create ZIP for Chrome Web Store
+        run: |
+          ZIP_NAME="injoloca-${{ steps.bump.outputs.new_version }}.zip"
+          zip -r $ZIP_NAME \
+            manifest.json \
+            popup.html \
+            popup.js \
+            LICENSE \
+            background.js \
+            icon48.png \
+            icon128.png
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+
+      # 6️⃣ Criar Release no GitHub
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          release_name: "INJOLOCA v${{ steps.bump.outputs.new_version }}"
+          body: "Versão automática gerada pelo workflow."
+          draft: false
+          prerelease: false
+
+      # 7️⃣ Upload ZIP como asset da Release
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./injoloca-${{ steps.bump.outputs.new_version }}.zip
+          asset_name: injoloca-${{ steps.bump.outputs.new_version }}.zip
+          asset_content_type: application/zip
