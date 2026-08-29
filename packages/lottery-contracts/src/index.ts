@@ -156,3 +156,16 @@ export interface AxisRarityAssessment {
   readonly totalOutcomes: number;
   readonly theoreticalFrequency: ExactFraction;
 }
+
+/**
+ * Stable boundary used by audit and statistics. Individual lotteries own their
+ * profile shape and rule semantics; the Core only relies on this operation.
+ */
+export interface LotteryMetricEngine<Profile> {
+  calculate(numbers: readonly number[]): Profile;
+}
+
+export interface StructuralRuleFlag {
+  readonly applicable: boolean;
+  readonly isExtreme: boolean | null;
+}

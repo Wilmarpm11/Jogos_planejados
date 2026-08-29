@@ -1,0 +1,19 @@
+schema: 1
+story: "2.2"
+gate: PASS
+status_reason: "O MetricEngine Lotofácil calcula as métricas canônicas para 15–20 dezenas e aplica E1–E8 somente onde os limiares canônicos são válidos: cartelas simples de 15."
+reviewer: "Quinn"
+reviewed_revision: "worktree:723c4184c6c9d31abe583b02de2f20e747166860e907b67127f385d786ef88a3"
+updated: "2026-08-29T21:05:03Z"
+top_issues: []
+waiver:
+  active: false
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (27 tests)"
+    - "CLI metrics command: PASS"
+    - "git diff --check: PASS"
+  limitations:
+    - "CodeRabbit CLI is not installed in this environment; manual review found no critical or high issue."
