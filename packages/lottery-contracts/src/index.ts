@@ -191,3 +191,22 @@ export interface StructuralSummary {
   readonly band: StructuralBand | null;
   readonly isCentralCore: boolean | null;
 }
+
+/** A single structural band in a completely enumerated lottery universe. */
+export interface StructuralMassBucket {
+  readonly band: StructuralBand;
+  readonly occurrences: number;
+  readonly frequency: ExactFraction;
+}
+
+/**
+ * Versioned theoretical distribution of structural bands. It intentionally
+ * contains no historical, strategy, or generated-portfolio information.
+ */
+export interface StructuralMassProfile {
+  readonly lotteryId: string;
+  readonly algorithmVersion: string;
+  readonly betSize: number;
+  readonly totalOutcomes: number;
+  readonly buckets: readonly StructuralMassBucket[];
+}

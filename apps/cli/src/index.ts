@@ -2,6 +2,7 @@ import { bootstrapDatabase } from "@boloes/data-access";
 import {
   calculateLotofacilAxisOccupancy,
   calculateLotofacilMetricProfile,
+  calculateLotofacilStructuralMass,
   classifyLotofacilStructuralProfile,
   summarizeLotofacilStructuralProfile,
 } from "@boloes/lottery-lotofacil";
@@ -16,6 +17,8 @@ Comandos:
                        Calcula ocupação de linhas e colunas para 15–20 dezenas.
   lotofacil metrics --numbers 01,02,...
                        Calcula o perfil estrutural canônico da cartela.
+  lotofacil structural-mass
+                       Calcula a massa estrutural teórica de apostas simples.
 `;
 
 function argumentValue(name: string): string | undefined {
@@ -77,6 +80,8 @@ if (command === "help" || command === "--help" || command === "-h") {
       process.exitCode = 1;
     }
   }
+} else if (command === "lotofacil" && process.argv[3] === "structural-mass") {
+  process.stdout.write(JSON.stringify(calculateLotofacilStructuralMass()) + "\n");
 } else {
   process.stderr.write(`Comando desconhecido: ${command}\n\n${help}`);
   process.exitCode = 1;

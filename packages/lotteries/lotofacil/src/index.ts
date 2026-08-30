@@ -11,15 +11,18 @@ import {
   type LotteryMetricEngine,
   type StructuralClassifier,
   type StructuralBand,
+  type StructuralMassProfile,
   type StructuralRuleFlag,
   type StructuralSummary,
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
 } from "@boloes/lottery-contracts";
+import { forEachCombination } from "@boloes/combinatorics";
 
 export const LOTOFACIL_ID = "lotofacil";
 export const LOTOFACIL_METRIC_ENGINE_VERSION = "1.0.0";
 export const LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION = "1.0.0";
+export const LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
 export const LOTOFACIL_DEFINITION: LotteryDefinition = {
   id: LOTOFACIL_ID,
@@ -91,6 +94,11 @@ export interface LotofacilStructuralSummary extends StructuralSummary {
   }> | null;
 }
 
+export interface LotofacilStructuralMassProfile extends StructuralMassProfile {
+  readonly lotteryId: typeof LOTOFACIL_ID;
+  readonly betSize: 15;
+}
+
 export interface LotofacilCoreMetrics {
   readonly evenCount: number;
   readonly oddCount: number;
@@ -115,6 +123,7 @@ export interface LotofacilMetricProfile {
 }
 
 const cachedTheoreticalProfiles = new Map<LotofacilBetSize, LotofacilTheoreticalAxisProfile>();
+let cachedStructuralMassProfile: LotofacilStructuralMassProfile | undefined;
 
 function isSupportedBetSize(value: number): value is LotofacilBetSize {
   return LOTOFACIL_SUPPORTED_BET_SIZES.includes(value as LotofacilBetSize);
@@ -630,4 +639,53 @@ export function summarizeLotofacilStructuralProfile(
     isCentralCore: Object.values(centralCoreCriteria).every(Boolean),
     centralCoreCriteria,
   };
+}
+
+const STRUCTURAL_BAND_ORDER: readonly StructuralBand[] = [
+  "ZERO_EXTREMES",
+  "ONE_EXTREME",
+  "TWO_EXTREMES",
+  "THREE_EXTREMES",
+  "FOUR_PLUS_EXTREMES",
+];
+
+/**
+ * Enumerates the complete C(25, 15) universe and consolidates its canonical
+ * structural bands. This is a neutral theoretical reference, not a prediction
+ * or a strategy constraint.
+ */
+export function calculateLotofacilStructuralMass(): LotofacilStructuralMassProfile {
+  if (cachedStructuralMassProfile) {
+    return cachedStructuralMassProfile;
+  }
+
+  const occurrences = new Map<StructuralBand, number>(
+    STRUCTURAL_BAND_ORDER.map((band) => [band, 0]),
+  );
+  let totalOutcomes = 0;
+
+  forEachCombination(LOTOFACIL_DEFINITION.totalNumbers, LOTOFACIL_DEFINITION.drawSize, (indexes) => {
+    const numbers = indexes.map((index) => index + 1);
+    const profile = lotofacilMetricEngine.calculate(numbers);
+    const classification = lotofacilStructuralClassifier.classify(profile);
+    const summary = summarizeLotofacilStructuralProfile(profile, classification);
+    if (!summary.applicable || summary.band === null) {
+      throw new Error("A simple Lotofácil combination requires an applicable structural summary.");
+    }
+    occurrences.set(summary.band, (occurrences.get(summary.band) ?? 0) + 1);
+    totalOutcomes += 1;
+  });
+
+  cachedStructuralMassProfile = {
+    lotteryId: LOTOFACIL_ID,
+    algorithmVersion: LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION,
+    betSize: 15,
+    totalOutcomes,
+    buckets: STRUCTURAL_BAND_ORDER.map((band) => ({
+      band,
+      occurrences: occurrences.get(band) ?? 0,
+      frequency: reduceFraction(occurrences.get(band) ?? 0, totalOutcomes),
+    })),
+  };
+  return cachedStructuralMassProfile;
 }
