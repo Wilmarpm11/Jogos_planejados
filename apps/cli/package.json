@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@boloes/data-access": "file:../../packages/data-access"
+    "@boloes/audit-engine": "file:../../packages/audit-engine",
+    "@boloes/data-access": "file:../../packages/data-access",
+    "@boloes/result-ingestion": "file:../../packages/result-ingestion",
+    "@boloes/strategy-registry": "file:../../packages/strategy-registry",
+    "@boloes/statistics-engine": "file:../../packages/statistics-engine"
   }
 }

@@ -1,0 +1,10 @@
+schema: 1
+story: "3.7"
+gate: PASS
+status_reason: "Janelas contam concursos distintos, selecionam deterministicamente a correção mais recente e preservam a proveniência do snapshot escolhido."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "worktree:48d31c0e3ffde8e90a7234bab79500d9439bae24ad7a80066d592fafded743d9"
+updated: "2026-08-30T20:47:41Z"
+top_issues: []
+waiver: { active: false }
+evidence: { tests_reviewed: 82 }

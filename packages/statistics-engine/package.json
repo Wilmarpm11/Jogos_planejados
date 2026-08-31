@@ -1,0 +1,11 @@
+{
+  "name": "@boloes/statistics-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@boloes/lottery-contracts": "file:../lottery-contracts",
+    "@boloes/lottery-lotofacil": "file:../lotteries/lotofacil"
+  }
+}

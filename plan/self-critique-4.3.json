@@ -1,0 +1,35 @@
+{
+  "story": "4.3",
+  "postCode": {
+    "status": "PASSED",
+    "checks": {
+      "predictedBugs": "PASS",
+      "edgeCases": "PASS",
+      "errorHandling": "PASS",
+      "security": "PASS",
+      "resilience": "PASS"
+    },
+    "notes": [
+      "Entradas vazias, tamanhos inconsistentes, intervalo, duplicidade interna e ordenação são rejeitados.",
+      "Não há rede, banco, relógio, credenciais ou efeitos persistentes."
+    ]
+  },
+  "postTest": {
+    "status": "PASSED",
+    "checks": {
+      "patterns": "PASS",
+      "configuration": "PASS",
+      "testing": "PASS",
+      "documentation": "PASS",
+      "codeSmells": "PASS",
+      "maintainability": "PASS"
+    },
+    "tests": {
+      "targeted": "8 passed",
+      "fullSuite": "18 files, 103 passed",
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "coderabbitStoryScope": "0 findings"
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { forEachCombination } from "@boloes/combinatorics";
 import {
   calculateLotofacilStructuralMass,
   LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION,
+  LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT,
 } from "@boloes/lottery-lotofacil";
 
 describe("Lotofácil structural mass", () => {
@@ -61,5 +62,6 @@ describe("Lotofácil structural mass", () => {
 
     expect(percentages).toEqual([90.4231, 7.7101, 1.278, 0.3759, 0.2129]);
     expect(JSON.parse(JSON.stringify(mass))).toEqual(mass);
+    expect(mass).toEqual(LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT);
   });
 });

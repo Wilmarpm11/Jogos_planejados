@@ -11,6 +11,209 @@ export const lotteryDefinitionSchema = z.object({
 
 export type LotteryDefinition = z.infer<typeof lotteryDefinitionSchema>;
 
+export const normalizedLotteryResultSchema = z
+  .object({
+    lotteryId: z.string().min(1),
+    contestNumber: z.number().int().positive(),
+    drawDate: z.string().date(),
+    drawnNumbers: z.array(z.number().int().positive()).min(1),
+    sourceUrl: z.url(),
+    parserVersion: z.string().min(1),
+    validations: z.array(z.string().min(1)).min(1),
+    drawLocation: z.string().min(1).optional(),
+    drawMunicipalityUf: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type NormalizedLotteryResult = z.infer<typeof normalizedLotteryResultSchema>;
+
+export const lotteryResultLedgerRecordSchema = normalizedLotteryResultSchema.extend({
+  id: z.string().uuid(),
+  sourceSnapshotId: z.string().uuid(),
+  persistedAt: z.string().datetime({ offset: true }),
+});
+export type LotteryResultLedgerRecord = z.infer<typeof lotteryResultLedgerRecordSchema>;
+
+export const historicalMetricProfileInputSchema = z.object({
+  sourceResultId: z.string().uuid(),
+  sourceSnapshotId: z.string().uuid(),
+  lotteryId: z.literal("lotofacil"),
+  metricEngineVersion: z.string().min(1),
+  profile: z.unknown(),
+});
+export type HistoricalMetricProfileInput = z.infer<typeof historicalMetricProfileInputSchema>;
+
+export const historicalMetricProfileRecordSchema = historicalMetricProfileInputSchema.extend({
+  id: z.string().uuid(),
+  persistedAt: z.string().datetime({ offset: true }),
+});
+export type HistoricalMetricProfileRecord = z.infer<typeof historicalMetricProfileRecordSchema>;
+
+export const cohortSelectorRuleSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("ALL_DRAWS") }).strict(),
+  z.object({ type: z.literal("LAST_N_DRAWS"), n: z.number().int().positive() }).strict(),
+  z.object({
+    type: z.literal("CONTEST_RANGE"),
+    startContest: z.number().int().positive(),
+    endContest: z.number().int().positive(),
+  }).strict().refine((rule) => rule.startContest <= rule.endContest, "startContest must be at most endContest."),
+  z.object({ type: z.literal("SPECIAL_DRAW_TYPE"), specialType: z.string().min(1) }).strict(),
+]);
+export type CohortSelectorRule = z.infer<typeof cohortSelectorRuleSchema>;
+
+export const cohortDefinitionSchema = z.object({
+  id: z.string().uuid(),
+  lotteryId: z.string().min(1),
+  selectorRule: cohortSelectorRuleSchema,
+  selectorRuleVersion: z.literal("1"),
+  createdAt: z.string().datetime({ offset: true }),
+});
+export type CohortDefinition = z.infer<typeof cohortDefinitionSchema>;
+
+export const cohortResolutionSchema = z.object({
+  id: z.string().uuid(),
+  cohortId: z.string().uuid(),
+  selectorRuleVersion: z.literal("1"),
+  resolvedDrawIds: z.array(z.string().uuid()),
+  resolvedMinContest: z.number().int().positive().nullable(),
+  resolvedMaxContest: z.number().int().positive().nullable(),
+  resolvedCount: z.number().int().nonnegative(),
+  dataVersionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  resolvedAt: z.string().datetime({ offset: true }),
+});
+export type CohortResolution = z.infer<typeof cohortResolutionSchema>;
+
+/** Allowed laboratory windows. This boundary intentionally excludes analysis. */
+export const lotofacilHistoryWindowSizeSchema = z.union([
+  z.literal(10),
+  z.literal(25),
+  z.literal(50),
+  z.literal(100),
+  z.literal(250),
+  z.literal("complete"),
+]);
+export type LotofacilHistoryWindowSize = z.infer<typeof lotofacilHistoryWindowSizeSchema>;
+
+const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
+const LOTOFACIL_PRIZE_TIERS = [11, 12, 13, 14, 15] as const;
+
+function hasEveryLotofacilBetSizeExactlyOnce(entries: readonly { betSize: number }[]): boolean {
+  return LOTOFACIL_SUPPORTED_BET_SIZES.every(
+    (supportedBetSize) => entries.filter(({ betSize }) => betSize === supportedBetSize).length === 1,
+  );
+}
+
+function hasEveryLotofacilPrizeTierExactlyOnce(prizeTiers: readonly number[]): boolean {
+  return LOTOFACIL_PRIZE_TIERS.every(
+    (supportedTier) => prizeTiers.filter((tier) => tier === supportedTier).length === 1,
+  );
+}
+
+const lotofacilPriceByBetSizeSchema = z
+  .array(z.object({ betSize: z.number().int().min(15).max(20), priceInCents: z.number().int().positive() }))
+  .length(LOTOFACIL_SUPPORTED_BET_SIZES.length)
+  .refine(hasEveryLotofacilBetSizeExactlyOnce, "priceByBetSize must include each bet size from 15 through 20 exactly once.");
+
+const lotofacilBolaoLimitsSchema = z
+  .array(z.object({ betSize: z.number().int().min(15).max(20), minShares: z.number().int().min(2), maxShares: z.number().int().positive(), maxGamesPerReceipt: z.number().int().positive() }))
+  .length(LOTOFACIL_SUPPORTED_BET_SIZES.length)
+  .refine(hasEveryLotofacilBetSizeExactlyOnce, "bolaoLimits must include each bet size from 15 through 20 exactly once.");
+
+export const lotofacilCatalogSchema = z
+  .object({
+    lotteryId: z.literal("lotofacil"),
+    sourceUrl: z.url(),
+    parserVersion: z.string().min(1),
+    priceByBetSize: lotofacilPriceByBetSizeSchema,
+    bolaoLimits: lotofacilBolaoLimitsSchema,
+    prizeTiers: z
+      .array(z.number().int().min(11).max(15))
+      .length(LOTOFACIL_PRIZE_TIERS.length)
+      .refine(hasEveryLotofacilPrizeTierExactlyOnce, "prizeTiers must include each tier from 11 through 15 exactly once."),
+    validations: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+export type LotofacilCatalog = z.infer<typeof lotofacilCatalogSchema>;
+
+export const lotofacilCatalogRecordSchema = lotofacilCatalogSchema.extend({
+  id: z.string().uuid(),
+  sourceSnapshotId: z.string().uuid(),
+  persistedAt: z.string().datetime({ offset: true }),
+});
+export type LotofacilCatalogRecord = z.infer<typeof lotofacilCatalogRecordSchema>;
+
+/**
+ * Result of the validation boundary between a source-specific parser and the
+ * local provenance store. Source acquisition and parsing intentionally live
+ * outside this reusable contract.
+ */
+export const dataImportStatusSchema = z.enum(["VALIDATED", "INVALID", "FAILED"]);
+export type DataImportStatus = z.infer<typeof dataImportStatusSchema>;
+
+export const manualDatasetImportSchema = z
+  .object({
+    lotteryId: z.string().min(1),
+    sourceUrl: z.url(),
+    importedAt: z
+      .string()
+      .datetime({ offset: true })
+      .refine((value) => value.endsWith("Z"), "importedAt must use UTC (Z)."),
+    rawContent: z.string().min(1).optional(),
+    contentHash: z.string().min(1).optional(),
+    parserVersion: z.string().min(1),
+    validations: z.array(z.string().min(1)),
+    status: dataImportStatusSchema,
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (!input.rawContent && !input.contentHash) {
+      context.addIssue({
+        code: "custom",
+        message: "rawContent or contentHash is required.",
+        path: ["rawContent"],
+      });
+    }
+  });
+
+export type ManualDatasetImport = z.infer<typeof manualDatasetImportSchema>;
+
+export const dataImportRecordSchema = manualDatasetImportSchema.safeExtend({
+  id: z.string().uuid(),
+  persistedAt: z.string().datetime({ offset: true }),
+});
+export type DataImportRecord = z.infer<typeof dataImportRecordSchema>;
+
+export const datasetSnapshotSchema = z
+  .object({
+    lotteryId: z.string().min(1),
+    sourceUrl: z.url(),
+    importedAt: z
+      .string()
+      .datetime({ offset: true })
+      .refine((value) => value.endsWith("Z"), "importedAt must use UTC (Z)."),
+    rawContent: z.string().min(1).optional(),
+    contentHash: z.string().min(1).optional(),
+    parserVersion: z.string().min(1),
+    validations: z.array(z.string().min(1)),
+    status: z.literal("VALIDATED"),
+    id: z.string().uuid(),
+    dataImportId: z.string().uuid(),
+    persistedAt: z.string().datetime({ offset: true }),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (!input.rawContent && !input.contentHash) {
+      context.addIssue({
+        code: "custom",
+        message: "rawContent or contentHash is required.",
+        path: ["rawContent"],
+      });
+    }
+  });
+
+export type DatasetSnapshot = z.infer<typeof datasetSnapshotSchema>;
+
 export const strategyStatusSchema = z.enum([
   "DRAFT",
   "EXPLORATORY",
@@ -20,6 +223,139 @@ export const strategyStatusSchema = z.enum([
   "PRODUCTION",
   "REJECTED",
 ]);
+export type StrategyStatus = z.infer<typeof strategyStatusSchema>;
+
+export const resolvedStrategyModeSchema = z.enum(["NEUTRAL", "ADVANCED", "MANUAL_EXPERIMENTAL"]);
+export type ResolvedStrategyMode = z.infer<typeof resolvedStrategyModeSchema>;
+
+export const resolvedStrategyConfigSchema = z.object({
+  id: z.string().min(1), version: z.string().min(1), lotteryId: z.string().min(1),
+  betSize: z.number().int().positive(), mode: resolvedStrategyModeSchema,
+  structuralAllocation: z.record(z.string(), z.number().min(0).max(100)).optional(),
+  cohortId: z.string().uuid().optional(), auxiliaryConstraints: z.record(z.string(), z.unknown()).optional(),
+  hypothesisRefs: z.array(z.object({ id: z.string().min(1), version: z.string().min(1), status: strategyStatusSchema })).optional(),
+  statisticalLabel: z.enum(["NEUTRAL", "PRODUCTION", "MANUAL_EXPERIMENTAL"]),
+  seed: z.string().min(1), requiresManualAcknowledgement: z.boolean(),
+}).strict();
+export type ResolvedStrategyConfig = z.infer<typeof resolvedStrategyConfigSchema>;
+
+/** Parameters that affect only one transient candidate-generation execution. */
+export const portfolioGenerationParametersSchema = z.object({
+  seed: z.string().min(1),
+  candidateCount: z.number().int().positive(),
+}).strict();
+export type PortfolioGenerationParameters = z.infer<typeof portfolioGenerationParametersSchema>;
+
+/**
+ * Deliberately narrow input boundary for deterministic portfolio generation.
+ * It has no history, cohort, coverage, persistence, or freezing fields.
+ */
+export const portfolioGenerationRequestSchema = z.object({
+  lotteryDefinition: lotteryDefinitionSchema,
+  strategy: resolvedStrategyConfigSchema,
+  parameters: portfolioGenerationParametersSchema,
+}).strict();
+export type PortfolioGenerationRequest = z.infer<typeof portfolioGenerationRequestSchema>;
+
+export interface PortfolioGenerationCandidate {
+  readonly numbers: readonly number[];
+}
+
+/** A reusable lottery adapter contract for transient deterministic candidates. */
+export interface PortfolioGenerator<Request extends PortfolioGenerationRequest = PortfolioGenerationRequest> {
+  generate(request: Request): PortfolioGenerationResult;
+}
+
+export interface PortfolioGenerationResult {
+  readonly candidates: readonly PortfolioGenerationCandidate[];
+  readonly transient: true;
+  readonly persisted: false;
+  readonly frozen: false;
+  readonly coverageCalculated: false;
+  readonly probabilityClaimed: false;
+}
+
+export const basicPortfolioAuditCandidateSchema = z.object({
+  numbers: z.array(z.number().int().positive()),
+}).strict();
+
+/** Versioned, history-free boundary for transient portfolio diagnostics. */
+export const basicPortfolioAuditRequestSchema = z.object({
+  contractVersion: z.literal("1.0"),
+  lotteryDefinition: lotteryDefinitionSchema,
+  candidates: z.array(basicPortfolioAuditCandidateSchema).min(1),
+}).strict();
+export type BasicPortfolioAuditRequest = z.infer<typeof basicPortfolioAuditRequestSchema>;
+
+const auditNumberFrequencySchema = z.object({
+  number: z.number().int().positive(),
+  count: z.number().int().nonnegative(),
+}).strict();
+
+const auditPairFrequencySchema = z.object({
+  numbers: z.tuple([z.number().int().positive(), z.number().int().positive()]),
+  count: z.number().int().nonnegative(),
+}).strict();
+
+const duplicateAuditGameSchema = z.object({
+  numbers: z.array(z.number().int().positive()),
+  occurrences: z.number().int().min(2),
+}).strict();
+
+export const basicPortfolioAuditResultSchema = z.object({
+  contractVersion: z.literal("1.0"),
+  lottery: z.object({ id: z.string().min(1), definitionVersion: z.string().min(1) }).strict(),
+  betSize: z.number().int().positive(),
+  candidateCount: z.number().int().positive(),
+  valid: z.literal(true),
+  duplicateGames: z.array(duplicateAuditGameSchema),
+  numberFrequencies: z.array(auditNumberFrequencySchema),
+  pairFrequencies: z.array(auditPairFrequencySchema),
+  totals: z.object({
+    numberOccurrences: z.number().int().nonnegative(),
+    expectedNumberOccurrences: z.number().int().nonnegative(),
+    pairOccurrences: z.number().int().nonnegative(),
+    expectedPairOccurrences: z.number().int().nonnegative(),
+  }).strict(),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict();
+export type BasicPortfolioAuditResult = z.infer<typeof basicPortfolioAuditResultSchema>;
+
+export interface DeterministicRandom {
+  nextInt(upperExclusive: number): number;
+}
+
+/**
+ * Small deterministic PRNG used only for repeatable local generation. It is
+ * not a source of entropy and must not be used for security-sensitive work.
+ */
+export function createDeterministicRandom(seed: string): DeterministicRandom {
+  let state = 2_166_136_261;
+  for (let index = 0; index < seed.length; index += 1) {
+    state = Math.imul(state ^ seed.charCodeAt(index)!, 16_777_619);
+  }
+
+  const nextUint32 = (): number => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return (value ^ (value >>> 14)) >>> 0;
+  };
+
+  return {
+    nextInt(upperExclusive: number): number {
+      if (!Number.isSafeInteger(upperExclusive) || upperExclusive <= 0) {
+        throw new Error("The random upper bound must be a positive safe integer.");
+      }
+      return Math.floor((nextUint32() / 0x1_0000_0000) * upperExclusive);
+    },
+  };
+}
 
 export const approvedStrategyConfigSchema = z.object({
   id: z.string().min(1),
@@ -30,6 +366,17 @@ export const approvedStrategyConfigSchema = z.object({
 });
 
 export type ApprovedStrategyConfig = z.infer<typeof approvedStrategyConfigSchema>;
+
+export const strategyConfigVersionInputSchema = approvedStrategyConfigSchema.extend({
+  previousRecordId: z.string().uuid().optional(),
+});
+export type StrategyConfigVersionInput = z.infer<typeof strategyConfigVersionInputSchema>;
+
+export const strategyConfigVersionSchema = strategyConfigVersionInputSchema.extend({
+  recordId: z.string().uuid(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+export type StrategyConfigVersion = z.infer<typeof strategyConfigVersionSchema>;
 
 export const generationParametersSchema = z.object({
   seed: z.string().min(1),

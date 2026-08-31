@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@boloes/combinatorics": "0.1.0",
+    "@boloes/domain-core": "0.1.0",
     "@boloes/lottery-contracts": "0.1.0"
   }
 }

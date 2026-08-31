@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@boloes/lottery-contracts": "file:../lottery-contracts",
     "better-sqlite3": "^13.0.3"
   }
 }

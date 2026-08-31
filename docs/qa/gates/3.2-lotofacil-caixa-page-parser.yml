@@ -1,0 +1,36 @@
+schema: 1
+story: "3.2"
+story_title: "Parser local da página pública Lotofácil CAIXA"
+gate: PASS
+status_reason: "O parser opera exclusivamente sobre conteúdo local, normaliza o resultado com versão e validações, e rejeita as variações inválidas exigidas pela story. A suíte confirma o comando offline e não há dependência de API, rede ou persistência."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "worktree:48d31c0e3ffde8e90a7234bab79500d9439bae24ad7a80066d592fafded743d9"
+updated: "2026-08-30T20:47:41Z"
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+evidence:
+  tests_reviewed: 82
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7]
+    ac_gaps: []
+nfr_validation:
+  security:
+    status: PASS
+    notes: "O comando lê apenas o arquivo indicado; não há cliente de rede ou API não documentada."
+  reliability:
+    status: PASS
+    notes: "Placeholders, ausência de marcadores, quantidade, repetição e fronteira das dezenas falham explicitamente."
+  maintainability:
+    status: PASS
+    notes: "Parser versionado, contrato público e fixtures mantêm a fronteira com a futura sincronização."
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (17 arquivos, 82 testes)"
+    - "git diff --check: PASS"
+  limitations:
+    - "CodeRabbit local revisou result-ingestion após as correções: zero achados."

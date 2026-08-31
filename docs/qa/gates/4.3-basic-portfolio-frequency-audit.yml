@@ -1,0 +1,38 @@
+schema: 1
+story: '4.3'
+story_title: 'Auditoria básica de validade, duplicidade e frequências'
+gate: PASS
+status_reason: 'Os AC 1–7 estão cobertos; a fronteira pública exige candidatos com inteiros positivos antes do motor puro e da CLI local.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree:sha256:b39ad16318c52c139af3f43bb61ae6aaa0230d934e64702d34a77c25defc2064'
+updated: '2026-08-31T00:44:11Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+evidence:
+  tests_reviewed: 10
+  regression_tests_passed: 108
+  test_files_passed: 18
+  coderabbit_story_findings: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7]
+    ac_gaps: []
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Schemas estritos rejeitam números não positivos; nenhuma rede, banco ou credencial.'
+  performance:
+    status: PASS
+    notes: 'Custo O(n*k^2 + u^2) documentado; interseções quadráticas e política de volume permanecem fora do escopo.'
+  reliability:
+    status: PASS
+    notes: 'Saída determinística, completa e com identidades combinatórias verificadas.'
+  maintainability:
+    status: PASS
+    notes: 'Contrato, motor, adaptador CLI e testes estão separados por responsabilidade.'
+recommendations:
+  immediate: []
+  future:
+    - action: 'Definir política de volume, progresso e cancelamento antes de operações pesadas do Epic 4.'
+      refs: ['docs/prd.md:NFR-04', 'docs/architecture/basic-portfolio-audit-contract.md']

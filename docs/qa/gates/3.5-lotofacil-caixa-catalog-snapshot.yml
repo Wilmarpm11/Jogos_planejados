@@ -1,0 +1,16 @@
+schema: 1
+story: "3.5"
+gate: PASS
+status_reason: "Preços e limites exigem cada tamanho 15–20 exatamente uma vez, e as faixas exigem 11–15 completas e únicas, além das restrições numéricas."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "working-tree:sha256:3412dd4c93bb78941154242bef0c1d77c3a4c16b0135eb18ac75ef9cf0f7b658"
+updated: "2026-08-31T00:44:11Z"
+top_issues: []
+waiver: { active: false }
+evidence:
+  tests_reviewed: 108
+  automated_checks: ["lint PASS", "typecheck PASS", "108 testes PASS", "git diff --check PASS", "CodeRabbit focado: zero achados"]
+  regressions:
+    - "priceByBetSize rejeita tamanho duplicado mesmo mantendo seis entradas."
+    - "bolaoLimits rejeita catálogo com tamanho suportado ausente."
+    - "prizeTiers rejeita faixa duplicada e a consequente ausência de uma faixa suportada."

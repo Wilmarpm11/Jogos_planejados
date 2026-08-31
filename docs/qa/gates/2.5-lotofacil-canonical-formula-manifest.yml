@@ -1,0 +1,33 @@
+schema: 1
+story: "2.5"
+gate: PASS
+status_reason: "O manifesto preserva os contratos canônicos por valor e publica a massa estrutural por snapshot exato e versionado, sem enumerar 3.268.760 combinações durante a consulta."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "working-tree:sha256:b6a66302d9f8505c79773a42d5b192b03abc8c940ebfd2d46a50a93e203cbf92"
+updated: "2026-08-31T00:30:19Z"
+top_issues: []
+waiver:
+  active: false
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (18 arquivos, 103 testes)"
+    - "npm run cli -- lotofacil formula: PASS (~0,21 s)"
+    - "git diff --check: PASS"
+    - "CodeRabbit local: 0 achados relevantes após a correção"
+  traceability:
+    - "AC 1: a saída declara definição 25/15, versão e apostas 15–20."
+    - "AC 2 e 4: limites E1–E10, núcleo e política auxiliar são constantes compartilhadas pelo classificador e pelo manifesto."
+    - "AC 3: a saída declara expectedPerAxis como bet_size / 5, limiares de raridade e não aplicabilidade estrutural para 16–20."
+    - "AC 5: o comando CLI retornou o snapshot exato e versionado da massa de 3.268.760 para betSize 15, com cinco faixas e frações inteiras."
+    - "AC 6: o módulo referencia CONTRACT_VERSION, HASH_ALGORITHM e HASH_VERSION de @boloes/domain-core sem outro algoritmo."
+    - "AC 7 e 8: testes e inspeção confirmaram ausência de histórico, resultado, estratégia, geração, cobertura e persistência."
+  limitations:
+    - "O limite operacional de candidateCount pertence à Story 4.2/NFR-04 e requer decisão de produto; não altera o contrato do manifesto."
+  immutability:
+    - "Políticas internas estão profundamente congeladas em runtime."
+    - "O manifesto devolve cópias das políticas, limites, definição, métricas, limiares e massa estrutural."
+  performance:
+    - "A consulta do manifesto usa snapshot constante e não executa a enumeração combinatória."
+    - "O calculador explícito permanece disponível e o teste prova igualdade integral entre cálculo e snapshot."

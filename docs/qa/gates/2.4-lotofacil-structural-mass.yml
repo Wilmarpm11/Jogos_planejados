@@ -1,0 +1,25 @@
+schema: 1
+story: "2.4"
+gate: PASS
+status_reason: "A massa estrutural enumera exatamente C(25,15), conserva as cinco faixas mutuamente exclusivas e expõe frações exatas sem transferir a referência para apostas de 16–20. Os gates automatizados e os dois comandos CLI passaram na revisão do commit atual."
+reviewer: "Quinn"
+reviewed_revision: "commit:b4ccb7de306f77dd11f84b15e7eec994123cd6c1"
+updated: "2026-08-30T12:43:00Z"
+top_issues: []
+waiver:
+  active: false
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (6 arquivos, 41 testes)"
+    - "npm run cli -- lotofacil structural-mass: PASS"
+    - "npm run cli -- lotofacil metrics --numbers 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15: PASS"
+    - "git diff --check: PASS"
+  traceability:
+    - "AC 1 e 3: enumeração completa e conservação da massa verificadas em tests/lotofacil/structural-mass.test.ts."
+    - "AC 2, 4 e 6: a implementação reutiliza MetricEngine, StructuralClassifier e resumo canônicos; a saída declara betSize 15 e frequências serializáveis."
+    - "AC 5 e 8: os testes verificam contagens, percentuais canônicos, serialização e fronteiras 16–20."
+    - "AC 7: o comando CLI structural-mass retornou a massa sem histórico, estratégia ou geração."
+  limitations:
+    - "CodeRabbit CLI permanece desabilitado em core-config.yaml; a revisão manual não encontrou achados altos."

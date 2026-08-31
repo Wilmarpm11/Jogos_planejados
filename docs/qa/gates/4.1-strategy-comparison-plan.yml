@@ -1,0 +1,17 @@
+schema: 1
+story: "4.1"
+story_title: "Plano de comparação de estratégias"
+gate: PASS
+status_reason: "A comparação valida configurações e expõe somente indicadores implementados, sem gerar, persistir ou consultar histórico."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "worktree:48d31c0e3ffde8e90a7234bab79500d9439bae24ad7a80066d592fafded743d9"
+updated: "2026-08-30T20:47:41Z"
+top_issues: []
+waiver: { active: false }
+quality_score: 100
+evidence:
+  tests_reviewed: 82
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+  automated_checks: ["lint PASS", "typecheck PASS", "82 testes PASS", "git diff --check PASS"]

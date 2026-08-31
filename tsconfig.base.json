@@ -16,7 +16,11 @@
       "@boloes/domain-core": ["packages/domain-core/src/index.ts"],
       "@boloes/lottery-contracts": ["packages/lottery-contracts/src/index.ts"],
       "@boloes/data-access": ["packages/data-access/src/index.ts"],
+      "@boloes/result-ingestion": ["packages/result-ingestion/src/index.ts"],
+      "@boloes/strategy-registry": ["packages/strategy-registry/src/index.ts"],
+      "@boloes/statistics-engine": ["packages/statistics-engine/src/index.ts"],
       "@boloes/combinatorics": ["packages/combinatorics/src/index.ts"],
+      "@boloes/audit-engine": ["packages/audit-engine/src/index.ts"],
       "@boloes/lottery-lotofacil": ["packages/lotteries/lotofacil/src/index.ts"]
     }
   }

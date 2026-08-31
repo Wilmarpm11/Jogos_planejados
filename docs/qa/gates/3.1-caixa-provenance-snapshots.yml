@@ -1,0 +1,39 @@
+schema: 1
+story: "3.1"
+story_title: "Proveniência e snapshots imutáveis da CAIXA"
+gate: PASS
+status_reason: "Migrations não escrevem em leituras de schema atual, transações preservam a causa original e a proveniência permanece atômica e imutável."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "worktree:48d31c0e3ffde8e90a7234bab79500d9439bae24ad7a80066d592fafded743d9"
+updated: "2026-08-30T20:47:41Z"
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+evidence:
+  tests_reviewed: 82
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Não há acesso de rede; o CLI só lê o envelope local e usa parâmetros SQL preparados."
+  performance:
+    status: PASS
+    notes: "Consultas indexadas por modalidade e transações SQLite locais; não há processamento de histórico nesta story."
+  reliability:
+    status: PASS
+    notes: "Falhas de inserção fazem rollback e importações INVALID/FAILED não criam snapshots."
+  maintainability:
+    status: PASS
+    notes: "Contratos runtime, documentação e testes de integração delimitam claramente parser e sincronização futuros."
+review_notes:
+  automated_checks:
+    - "npm run lint: PASS"
+    - "npm run typecheck: PASS"
+    - "npm test: PASS (17 arquivos, 82 testes)"
+    - "git diff --check: PASS"
+  limitations:
+    - "CodeRabbit local revisou data-access após as correções: zero achados."

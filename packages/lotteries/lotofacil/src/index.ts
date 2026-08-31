@@ -4,11 +4,15 @@ import {
   type AxisOccupancy,
   type AxisOccupancyMetric,
   type AxisRarityAssessment,
+  createDeterministicRandom,
   type ExactFraction,
   type RarityClass,
   type RarityThresholds,
   type LotteryDefinition,
   type LotteryMetricEngine,
+  type PortfolioGenerationRequest,
+  type PortfolioGenerationResult,
+  type PortfolioGenerator,
   type StructuralClassifier,
   type StructuralBand,
   type StructuralMassProfile,
@@ -18,12 +22,34 @@ import {
   type TheoreticalDistributionBucket,
 } from "@boloes/lottery-contracts";
 import { forEachCombination } from "@boloes/combinatorics";
+import {
+  CONTRACT_VERSION,
+  HASH_ALGORITHM,
+  HASH_VERSION,
+} from "@boloes/domain-core";
+
+function deepFreeze<T extends object>(value: T): T {
+  for (const nestedValue of Object.values(value as Record<string, unknown>)) {
+    if (typeof nestedValue === "object" && nestedValue !== null) deepFreeze(nestedValue);
+  }
+  return Object.freeze(value);
+}
+
+function cloneNestedRecord<T extends Readonly<Record<string, Readonly<Record<string, unknown>>>>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [key, { ...nestedValue }]),
+  ) as unknown as T;
+}
 
 export const LOTOFACIL_ID = "lotofacil";
 export const LOTOFACIL_METRIC_ENGINE_VERSION = "1.0.0";
 export const LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION = "1.0.0";
+export const LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION = "1.0.0";
+export const LOTOFACIL_CANONICAL_FORMULA_VERSION = "1.0.0";
 export const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
+const LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE = 3_268_760;
+const STRUCTURAL_ALLOCATION_PERCENTAGE = 100;
 export const LOTOFACIL_DEFINITION: LotteryDefinition = {
   id: LOTOFACIL_ID,
   version: "1.0.0",
@@ -120,6 +146,258 @@ export interface LotofacilMetricProfile {
   readonly betSize: LotofacilBetSize;
   readonly metrics: LotofacilCoreMetrics;
   readonly axisOccupancy: LotofacilAxisOccupancyProfile;
+}
+
+export const LOTOFACIL_CANONICAL_METRICS = [
+  "evenCount",
+  "oddCount",
+  "sum",
+  "lowCount",
+  "highCount",
+  "borderCount",
+  "centerCount",
+  "consecutivePairCount",
+  "maxConsecutiveRun",
+  "sequenceCount",
+  "amplitude",
+  "axisOccupancy",
+] as const;
+
+/** Special draw membership is explicit data, never inferred by this module. */
+export const LOTOFACIL_SPECIAL_DRAW_TYPES = ["LOTOFACIL_INDEPENDENCIA"] as const;
+export type LotofacilSpecialDrawType = (typeof LOTOFACIL_SPECIAL_DRAW_TYPES)[number];
+
+export const LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS = ["zeroExtremes", "oneExtreme", "twoExtremes", "threeExtremes", "fourPlusExtremes"] as const;
+
+export function validateLotofacilStructuralAllocation(allocation: Readonly<Record<string, number>>): void {
+  const keys = Object.keys(allocation).sort();
+  if (keys.join(",") !== [...LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS].sort().join(",")) throw new Error("A alocação Lotofácil deve conter as cinco faixas estruturais.");
+  const values = Object.values(allocation);
+  if (!values.every((value) => Number.isFinite(value) && value >= 0)) throw new Error("A alocação estrutural não pode conter valores negativos ou não finitos.");
+  if (Math.abs(values.reduce((sum, value) => sum + value, 0) - 100) > 1e-9) throw new Error("A alocação estrutural deve somar 100.");
+}
+
+const lotofacilAllocationBand: Readonly<Record<(typeof LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS)[number], StructuralBand>> = {
+  zeroExtremes: "ZERO_EXTREMES",
+  oneExtreme: "ONE_EXTREME",
+  twoExtremes: "TWO_EXTREMES",
+  threeExtremes: "THREE_EXTREMES",
+  fourPlusExtremes: "FOUR_PLUS_EXTREMES",
+};
+
+/** Pure comparison reference: requested allocation against the neutral mass. */
+export function summarizeLotofacilStructuralAllocation(allocation: Readonly<Record<string, number>>) {
+  validateLotofacilStructuralAllocation(allocation);
+  const mass = calculateLotofacilStructuralMass();
+  return LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS.map((key) => ({
+    key,
+    requestedPercent: allocation[key],
+    theoreticalMass: mass.buckets.find((bucket) => bucket.band === lotofacilAllocationBand[key])!,
+  }));
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = left;
+  let b = right;
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a;
+}
+
+function combinationCount(totalItems: number, selectionSize: number): number {
+  let result = 1;
+  for (let index = 1; index <= selectionSize; index += 1) {
+    result = (result * (totalItems - selectionSize + index)) / index;
+  }
+  return result;
+}
+
+function unrankLotofacilSimpleBet(rank: number): readonly number[] {
+  let remainingRank = rank;
+  let remainingNumbers = LOTOFACIL_DEFINITION.drawSize;
+  let minimumCandidate = 1;
+  const selected: number[] = [];
+
+  while (remainingNumbers > 0) {
+    for (let candidate = minimumCandidate; candidate <= LOTOFACIL_DEFINITION.totalNumbers - remainingNumbers + 1; candidate += 1) {
+      const combinationsAfterCandidate = combinationCount(
+        LOTOFACIL_DEFINITION.totalNumbers - candidate,
+        remainingNumbers - 1,
+      );
+      if (remainingRank < combinationsAfterCandidate) {
+        selected.push(candidate);
+        minimumCandidate = candidate + 1;
+        remainingNumbers -= 1;
+        break;
+      }
+      remainingRank -= combinationsAfterCandidate;
+    }
+  }
+  return selected;
+}
+
+function structuralAllocationCounts(
+  allocation: Readonly<Record<string, number>>,
+  candidateCount: number,
+): Readonly<Record<StructuralBand, number>> {
+  validateLotofacilStructuralAllocation(allocation);
+  const entries = LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS.map((key, index) => {
+    const exact = (allocation[key]! * candidateCount) / STRUCTURAL_ALLOCATION_PERCENTAGE;
+    return { band: lotofacilAllocationBand[key], count: Math.floor(exact), remainder: exact % 1, index };
+  });
+  let unallocated = candidateCount - entries.reduce((sum, entry) => sum + entry.count, 0);
+  for (const entry of [...entries].sort((left, right) => right.remainder - left.remainder || left.index - right.index)) {
+    if (unallocated === 0) break;
+    entry.count += 1;
+    unallocated -= 1;
+  }
+  return Object.fromEntries(entries.map((entry) => [entry.band, entry.count])) as Readonly<Record<StructuralBand, number>>;
+}
+
+function isLotofacilDefinition(definition: LotteryDefinition): boolean {
+  return definition.id === LOTOFACIL_DEFINITION.id &&
+    definition.version === LOTOFACIL_DEFINITION.version &&
+    definition.totalNumbers === LOTOFACIL_DEFINITION.totalNumbers &&
+    definition.drawSize === LOTOFACIL_DEFINITION.drawSize &&
+    definition.minBetSize === LOTOFACIL_DEFINITION.minBetSize &&
+    definition.maxBetSize === LOTOFACIL_DEFINITION.maxBetSize;
+}
+
+function canonicalGameOrder(left: readonly number[], right: readonly number[]): number {
+  return left.join(",").localeCompare(right.join(","));
+}
+
+/**
+ * Generates a transient deterministic set of Lotofácil simple bets. Neutral
+ * mode walks the seeded permutation without structural filtering; a supplied
+ * structural allocation is the only selection constraint applied.
+ */
+export function generateLotofacilPortfolio(
+  input: PortfolioGenerationRequest,
+): PortfolioGenerationResult {
+  const { lotteryDefinition, strategy, parameters } = input;
+  if (!isLotofacilDefinition(lotteryDefinition) || strategy.lotteryId !== LOTOFACIL_ID) {
+    throw new Error("The Lotofácil generator requires the canonical Lotofácil definition and strategy.");
+  }
+  if (strategy.betSize !== LOTOFACIL_DEFINITION.drawSize) {
+    throw new Error("The Lotofácil structural generator currently supports only 15-number simple bets.");
+  }
+  if (parameters.candidateCount > LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE) {
+    throw new Error("Requested candidates exceed the Lotofácil simple-bet universe.");
+  }
+
+  const targets = strategy.structuralAllocation
+    ? structuralAllocationCounts(strategy.structuralAllocation, parameters.candidateCount)
+    : null;
+  const random = createDeterministicRandom(parameters.seed);
+  const offset = random.nextInt(LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE);
+  let step = random.nextInt(LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE - 1) + 1;
+  while (greatestCommonDivisor(step, LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE) !== 1) step += 1;
+  if (step === LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE) step = 1;
+
+  const candidates: number[][] = [];
+  const allocated: Record<StructuralBand, number> = {
+    ZERO_EXTREMES: 0, ONE_EXTREME: 0, TWO_EXTREMES: 0, THREE_EXTREMES: 0, FOUR_PLUS_EXTREMES: 0,
+  };
+  for (let position = 0; position < LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE && candidates.length < parameters.candidateCount; position += 1) {
+    const rank = (offset + step * position) % LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE;
+    const numbers = unrankLotofacilSimpleBet(rank);
+    if (targets) {
+      const profile = calculateLotofacilMetricProfile(numbers);
+      const summary = summarizeLotofacilStructuralProfile(profile, classifyLotofacilStructuralProfile(profile));
+      if (!summary.band || allocated[summary.band] >= targets[summary.band]) continue;
+      allocated[summary.band] += 1;
+    }
+    candidates.push([...numbers]);
+  }
+  if (candidates.length !== parameters.candidateCount) {
+    throw new Error("The requested structural allocation cannot be fulfilled by the Lotofácil universe.");
+  }
+
+  return {
+    candidates: candidates.sort(canonicalGameOrder).map((numbers) => ({ numbers })),
+    transient: true,
+    persisted: false,
+    frozen: false,
+    coverageCalculated: false,
+    probabilityClaimed: false,
+  };
+}
+
+export const lotofacilPortfolioGenerator: PortfolioGenerator = {
+  generate: generateLotofacilPortfolio,
+};
+
+export const LOTOFACIL_EXTREME_RULE_LIMITS = deepFreeze({
+  E1: { metric: "evenCount", atMost: 4, atLeast: 11 },
+  E2: { metric: "sum", atMost: 149, atLeast: 241 },
+  E3: { metric: "borderCount", atMost: 6, atLeast: 14 },
+  E4: { metric: "lowCount", atMost: 4, atLeast: 12 },
+  E5: { metric: "consecutivePairCount", atMost: 5, atLeast: 12 },
+  E6: { metric: "maxConsecutiveRun", atMost: 2, atLeast: 9 },
+  E7: { metric: "sequenceCount", atMost: 1, atLeast: 7 },
+  E8: { metric: "amplitude", atMost: 18 },
+  E9: { axis: "ROWS", deviationAtLeast: 8 },
+  E10: { axis: "COLUMNS", deviationAtLeast: 8 },
+} as const);
+
+export const LOTOFACIL_CENTRAL_CORE_LIMITS = deepFreeze({
+  evenCount: { min: 6, max: 9 },
+  sum: { min: 176, max: 214 },
+  borderCount: { min: 8, max: 12 },
+  lowCount: { min: 7, max: 10 },
+  consecutivePairCount: { min: 7, max: 10 },
+} as const);
+
+export const LOTOFACIL_AXIS_AUXILIARY_POLICY = deepFreeze({
+  applicableBetSize: 15,
+  priority: ["VERY_RARE", "RARE", "ATTENTION", "NONE"] as const,
+  veryRare: { axesWithZeroAtLeast: 2 },
+  rare: { axesWithZeroAtLeast: 1 },
+  attention: { axesWithOneAtLeast: 2 },
+} as const);
+
+export interface LotofacilCanonicalFormulaManifest {
+  readonly formulaVersion: typeof LOTOFACIL_CANONICAL_FORMULA_VERSION;
+  readonly lotteryDefinition: LotteryDefinition;
+  readonly supportedBetSizes: readonly LotofacilBetSize[];
+  readonly metricEngine: Readonly<{
+    version: typeof LOTOFACIL_METRIC_ENGINE_VERSION;
+    metrics: typeof LOTOFACIL_CANONICAL_METRICS;
+  }>;
+  readonly axisOccupancy: Readonly<{
+    algorithmVersion: typeof LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION;
+    expectedPerAxis: "bet_size / 5";
+    rarityThresholds: RarityThresholds;
+    auxiliaryPolicy: typeof LOTOFACIL_AXIS_AUXILIARY_POLICY;
+  }>;
+  readonly structuralClassification: Readonly<{
+    classifierVersion: typeof LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION;
+    applicableBetSize: 15;
+    nonApplicableBetSizes: readonly [16, 17, 18, 19, 20];
+    extremeRuleLimits: typeof LOTOFACIL_EXTREME_RULE_LIMITS;
+    centralCoreLimits: typeof LOTOFACIL_CENTRAL_CORE_LIMITS;
+  }>;
+  readonly structuralMass: LotofacilStructuralMassProfile;
+  readonly canonicalPortfolioIdentity: Readonly<{
+    contractVersion: typeof CONTRACT_VERSION;
+    hashAlgorithm: typeof HASH_ALGORITHM;
+    hashVersion: typeof HASH_VERSION;
+    canonicalizeFunction: "canonicalizePortfolio";
+    gameNumberOrdering: "ASCENDING_NUMERIC";
+    portfolioGameOrdering: "LOCALE_COMPARE_OF_COMMA_JOINED_CANONICAL_GAMES";
+  }>;
+  readonly exclusions: readonly [
+    "HISTORY",
+    "RESULTS",
+    "STRATEGY",
+    "GENERATION",
+    "COVERAGE",
+    "PERSISTENCE",
+  ];
 }
 
 const cachedTheoreticalProfiles = new Map<LotofacilBetSize, LotofacilTheoreticalAxisProfile>();
@@ -499,18 +777,44 @@ function extremeRulesForSimpleBet(
     isExtreme,
   });
   return {
-    E1: rule(metrics.evenCount <= 4 || metrics.evenCount >= 11),
-    E2: rule(metrics.sum <= 149 || metrics.sum >= 241),
-    E3: rule(metrics.borderCount <= 6 || metrics.borderCount >= 14),
-    E4: rule(metrics.lowCount <= 4 || metrics.lowCount >= 12),
-    E5: rule(metrics.consecutivePairCount <= 5 || metrics.consecutivePairCount >= 12),
-    E6: rule(metrics.maxConsecutiveRun <= 2 || metrics.maxConsecutiveRun >= 9),
-    E7: rule(metrics.sequenceCount <= 1 || metrics.sequenceCount >= 7),
-    E8: rule(metrics.amplitude <= 18),
-    E9: rule(axisOccupancy.rows.deviation.numerator >= 8 * axisOccupancy.rows.deviation.denominator),
+    E1: rule(
+      metrics.evenCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E1.atMost ||
+        metrics.evenCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E1.atLeast,
+    ),
+    E2: rule(
+      metrics.sum <= LOTOFACIL_EXTREME_RULE_LIMITS.E2.atMost ||
+        metrics.sum >= LOTOFACIL_EXTREME_RULE_LIMITS.E2.atLeast,
+    ),
+    E3: rule(
+      metrics.borderCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E3.atMost ||
+        metrics.borderCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E3.atLeast,
+    ),
+    E4: rule(
+      metrics.lowCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E4.atMost ||
+        metrics.lowCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E4.atLeast,
+    ),
+    E5: rule(
+      metrics.consecutivePairCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E5.atMost ||
+        metrics.consecutivePairCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E5.atLeast,
+    ),
+    E6: rule(
+      metrics.maxConsecutiveRun <= LOTOFACIL_EXTREME_RULE_LIMITS.E6.atMost ||
+        metrics.maxConsecutiveRun >= LOTOFACIL_EXTREME_RULE_LIMITS.E6.atLeast,
+    ),
+    E7: rule(
+      metrics.sequenceCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E7.atMost ||
+        metrics.sequenceCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E7.atLeast,
+    ),
+    E8: rule(metrics.amplitude <= LOTOFACIL_EXTREME_RULE_LIMITS.E8.atMost),
+    E9: rule(
+      axisOccupancy.rows.deviation.numerator >=
+        LOTOFACIL_EXTREME_RULE_LIMITS.E9.deviationAtLeast *
+          axisOccupancy.rows.deviation.denominator,
+    ),
     E10: rule(
       axisOccupancy.columns.deviation.numerator >=
-        8 * axisOccupancy.columns.deviation.denominator,
+        LOTOFACIL_EXTREME_RULE_LIMITS.E10.deviationAtLeast *
+          axisOccupancy.columns.deviation.denominator,
     ),
   };
 }
@@ -519,16 +823,16 @@ function auxiliaryAxisSignal(
   occupancy: AxisOccupancy,
   betSize: LotofacilBetSize,
 ): LotofacilAxisAuxiliaryClassification {
-  if (betSize !== 15) {
+  if (betSize !== LOTOFACIL_AXIS_AUXILIARY_POLICY.applicableBetSize) {
     return { applicable: false, signal: null };
   }
-  if (occupancy.axesWith[0] >= 2) {
+  if (occupancy.axesWith[0] >= LOTOFACIL_AXIS_AUXILIARY_POLICY.veryRare.axesWithZeroAtLeast) {
     return { applicable: true, signal: "VERY_RARE" };
   }
-  if (occupancy.axesWith[0] >= 1) {
+  if (occupancy.axesWith[0] >= LOTOFACIL_AXIS_AUXILIARY_POLICY.rare.axesWithZeroAtLeast) {
     return { applicable: true, signal: "RARE" };
   }
-  if (occupancy.axesWith[1] >= 2) {
+  if (occupancy.axesWith[1] >= LOTOFACIL_AXIS_AUXILIARY_POLICY.attention.axesWithOneAtLeast) {
     return { applicable: true, signal: "ATTENTION" };
   }
   return { applicable: true, signal: "NONE" };
@@ -567,7 +871,7 @@ export function classifyLotofacilStructuralProfile(
   profile: LotofacilMetricProfile,
 ): LotofacilStructuralClassification {
   return {
-    classifierVersion: "1.0.0",
+    classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION,
     extremeRules: extremeRulesForSimpleBet(profile.metrics, profile.axisOccupancy),
     auxiliaryAxisSignals: {
       rows: auxiliaryAxisSignal(profile.axisOccupancy.rows, profile.betSize),
@@ -624,12 +928,21 @@ export function summarizeLotofacilStructuralProfile(
   const extremeCount = rules.filter((rule) => rule.isExtreme).length;
   const metrics = profile.metrics;
   const centralCoreCriteria = {
-    evenCount: metrics.evenCount >= 6 && metrics.evenCount <= 9,
-    sum: metrics.sum >= 176 && metrics.sum <= 214,
-    borderCount: metrics.borderCount >= 8 && metrics.borderCount <= 12,
-    lowCount: metrics.lowCount >= 7 && metrics.lowCount <= 10,
+    evenCount:
+      metrics.evenCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.min &&
+      metrics.evenCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.max,
+    sum:
+      metrics.sum >= LOTOFACIL_CENTRAL_CORE_LIMITS.sum.min &&
+      metrics.sum <= LOTOFACIL_CENTRAL_CORE_LIMITS.sum.max,
+    borderCount:
+      metrics.borderCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.min &&
+      metrics.borderCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.max,
+    lowCount:
+      metrics.lowCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.min &&
+      metrics.lowCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.max,
     consecutivePairCount:
-      metrics.consecutivePairCount >= 7 && metrics.consecutivePairCount <= 10,
+      metrics.consecutivePairCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.min &&
+      metrics.consecutivePairCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.max,
   };
 
   return {
@@ -648,6 +961,25 @@ const STRUCTURAL_BAND_ORDER: readonly StructuralBand[] = [
   "THREE_EXTREMES",
   "FOUR_PLUS_EXTREMES",
 ];
+
+/**
+ * Versioned output generated by calculateLotofacilStructuralMass for algorithm
+ * 1.0.0. Manifest retrieval clones this snapshot instead of enumerating the
+ * complete simple-bet universe in the caller's synchronous path.
+ */
+export const LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT = deepFreeze({
+  lotteryId: LOTOFACIL_ID,
+  algorithmVersion: LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION,
+  betSize: 15,
+  totalOutcomes: LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE,
+  buckets: [
+    { band: "ZERO_EXTREMES", occurrences: 2_955_715, frequency: { numerator: 591_143, denominator: 653_752 } },
+    { band: "ONE_EXTREME", occurrences: 252_024, frequency: { numerator: 31_503, denominator: 408_595 } },
+    { band: "TWO_EXTREMES", occurrences: 41_775, frequency: { numerator: 8_355, denominator: 653_752 } },
+    { band: "THREE_EXTREMES", occurrences: 12_286, frequency: { numerator: 6_143, denominator: 1_634_380 } },
+    { band: "FOUR_PLUS_EXTREMES", occurrences: 6_960, frequency: { numerator: 174, denominator: 81_719 } },
+  ],
+} satisfies LotofacilStructuralMassProfile);
 
 /**
  * Enumerates the complete C(25, 15) universe and consolidates its canonical
@@ -688,4 +1020,61 @@ export function calculateLotofacilStructuralMass(): LotofacilStructuralMassProfi
     })),
   };
   return cachedStructuralMassProfile;
+}
+
+/**
+ * Returns the versioned, serializable Lotofácil formula reference for local
+ * audit. It composes existing contracts and never evaluates history, strategy,
+ * generation, coverage, persistence, or results.
+ */
+export function getLotofacilCanonicalFormulaManifest(): LotofacilCanonicalFormulaManifest {
+  const structuralMass = LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT;
+  return {
+    formulaVersion: LOTOFACIL_CANONICAL_FORMULA_VERSION,
+    lotteryDefinition: { ...LOTOFACIL_DEFINITION },
+    supportedBetSizes: [...LOTOFACIL_SUPPORTED_BET_SIZES],
+    metricEngine: {
+      version: LOTOFACIL_METRIC_ENGINE_VERSION,
+      metrics: [...LOTOFACIL_CANONICAL_METRICS] as unknown as typeof LOTOFACIL_CANONICAL_METRICS,
+    },
+    axisOccupancy: {
+      algorithmVersion: LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION,
+      expectedPerAxis: "bet_size / 5",
+      rarityThresholds: {
+        normalMin: { ...DEFAULT_RARITY_THRESHOLDS.normalMin },
+        attentionMin: { ...DEFAULT_RARITY_THRESHOLDS.attentionMin },
+        rareMin: { ...DEFAULT_RARITY_THRESHOLDS.rareMin },
+      },
+      auxiliaryPolicy: {
+        ...LOTOFACIL_AXIS_AUXILIARY_POLICY,
+        priority: [...LOTOFACIL_AXIS_AUXILIARY_POLICY.priority],
+        veryRare: { ...LOTOFACIL_AXIS_AUXILIARY_POLICY.veryRare },
+        rare: { ...LOTOFACIL_AXIS_AUXILIARY_POLICY.rare },
+        attention: { ...LOTOFACIL_AXIS_AUXILIARY_POLICY.attention },
+      } as typeof LOTOFACIL_AXIS_AUXILIARY_POLICY,
+    },
+    structuralClassification: {
+      classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION,
+      applicableBetSize: 15,
+      nonApplicableBetSizes: [16, 17, 18, 19, 20],
+      extremeRuleLimits: cloneNestedRecord(LOTOFACIL_EXTREME_RULE_LIMITS),
+      centralCoreLimits: cloneNestedRecord(LOTOFACIL_CENTRAL_CORE_LIMITS),
+    },
+    structuralMass: {
+      ...structuralMass,
+      buckets: structuralMass.buckets.map((bucket) => ({
+        ...bucket,
+        frequency: { ...bucket.frequency },
+      })),
+    },
+    canonicalPortfolioIdentity: {
+      contractVersion: CONTRACT_VERSION,
+      hashAlgorithm: HASH_ALGORITHM,
+      hashVersion: HASH_VERSION,
+      canonicalizeFunction: "canonicalizePortfolio",
+      gameNumberOrdering: "ASCENDING_NUMERIC",
+      portfolioGameOrdering: "LOCALE_COMPARE_OF_COMMA_JOINED_CANONICAL_GAMES",
+    },
+    exclusions: ["HISTORY", "RESULTS", "STRATEGY", "GENERATION", "COVERAGE", "PERSISTENCE"],
+  };
 }

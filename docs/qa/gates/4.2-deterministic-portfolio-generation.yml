@@ -1,0 +1,42 @@
+schema: 1
+story: "4.2"
+story_title: "Geração determinística de candidatos"
+gate: PASS
+status_reason: "A geração é reproduzível, válida, transitória e isolada de histórico, cobertura e persistência; a fronteira estrutural também rejeita percentuais negativos ou não finitos."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "worktree:0b0ee90e92919ab75145f51bc653bc0da7388bc4cec066dfcc3672089f5a482f"
+updated: "2026-08-30T23:52:44Z"
+top_issues: []
+waiver: { active: false }
+quality_score: 100
+evidence:
+  tests_reviewed: 94
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+  coderabbit:
+    status: PASS
+    relevant_findings: 0
+    corrections:
+      - "A validação pública passou a rejeitar valores negativos e não finitos."
+      - "A soma de 100% passou a tolerar apenas ruído mínimo de ponto flutuante."
+    out_of_scope_findings:
+      - "Imutabilidade do manifesto canônico pertence à Story 2.5."
+      - "Unicidade do catálogo de preços/bolão pertence à Story 3.5."
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Entrada estrita; sem segredos, rede, banco ou dados históricos no caminho de geração."
+  performance:
+    status: PASS
+    notes: "A permutação evita repetição sem enumerar o universo no modo neutro; o filtro estrutural é aplicado apenas quando solicitado."
+  reliability:
+    status: PASS
+    notes: "A mesma seed retorna a mesma sequência canônica; alocações negativas, não finitas ou materialmente diferentes de 100% falham explicitamente."
+  maintainability:
+    status: PASS
+    notes: "Contrato reutilizável, adaptador específico da modalidade e testes unitários/CLI separados."
+recommendations:
+  immediate: []
+  future: []

@@ -14,6 +14,7 @@
 | 2026-08-29 | 0.4.1 | Parecer final de Architect, PO e QA; gates de produção explicitados | PM / AIOX |
 | 2026-08-29 | 0.4.2 | Removidos exemplos de carteira de teste; fórmula como única referência canônica | PM / AIOX |
 | 2026-08-29 | 0.4.3 | Ocupação de linhas/colunas normalizada por tamanho de aposta (15–20) e raridade teórica por universo | PM / AIOX |
+| 2026-08-30 | 0.4.4 | Modo avançado, coorte contextual, estratégia manual experimental e comparação pré-geração | Produto |
 
 ## 1. Objetivo e contexto
 
@@ -109,7 +110,14 @@ de apostas de 15 dezenas nas apostas maiores.
 
 Na abertura, o app inicia sincronização assíncrona de resultados, regras, preços,
 limites de bolão e calendário da modalidade. A fonte oficial prioritária é a
-página pública da CAIXA; importação manual de arquivo oficial é contingência.
+página pública da CAIXA. Para o resultado mais recente da Lotofácil, fica
+autorizada a exceção controlada do endpoint JSON no domínio oficial da CAIXA
+`https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil`; importação
+manual de arquivo oficial permanece como contingência.
+
+A exceção é restrita à URL exata, ao contrato de campos validado e ao parser
+versionado. Nenhum outro endpoint não documentado fica autorizado por esta
+decisão.
 
 Cada importação guarda modalidade, URL, horário UTC, conteúdo bruto ou hash,
 versão do parser, validações, status e `DatasetSnapshot` imutável. Dados inválidos
@@ -128,6 +136,23 @@ DRAFT -> EXPLORATORY -> VALIDATING -> HOLDOUT -> VALIDATED -> PRODUCTION
 Somente `PRODUCTION` pode alterar geração automática. `EXPERIMENTAL_SPECIAL`
 exige seleção manual, aviso persistente, amostra, hipótese, concentração e
 universo abandonado no relatório.
+
+### FR-04.1 - Modos de estratégia e comparação pré-geração
+
+O produto suporta `NEUTRAL`, `ADVANCED` e `MANUAL_EXPERIMENTAL`. O modo neutro
+preserva a distribuição estrutural neutra e nunca é enviesado automaticamente
+por coorte. Em `ADVANCED`, o usuário pode escolher uma distribuição estrutural
+explícita que some 100%, uma coorte de contexto opcional e restrições suportadas
+pela modalidade/tamanho de aposta. A coorte é apenas contexto de análise: ela
+não cria padrão, recomendação ou viés automático.
+
+Critérios escolhidos manualmente com hipótese não `PRODUCTION` usam
+`MANUAL_EXPERIMENTAL`, exigem confirmação e aviso explícito, mas não mudam o
+status da hipótese nem são apresentados como vantagem preditiva. O gerador
+recebe somente um `StrategyConfig` resolvido, sem consultar histórico ou
+coortes. Antes de gerar, o usuário pode comparar configurações; a comparação
+não gera ou congela carteira e só retorna indicadores que já possuam motor
+matemático implementado.
 
 ### FR-05 - Geração, diversidade e auditoria
 
@@ -446,6 +471,7 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
 - Diretriz técnica consolidada fornecida pelo produto.
 - Imagens de referência de impressão e fluxo operacional fornecidas pelo produto.
 - CAIXA: https://loterias.caixa.gov.br/Paginas/Lotofacil.aspx
+- CAIXA, resultado Lotofácil em JSON: https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil
 - CAIXA, regras de sorteios: https://loterias.caixa.gov.br/Paginas/regras-sorteios.aspx
 - INJOLOCA GPL: https://github.com/guynovaes/INJOLOCA
 - COLOGA: https://www.cologa.com.br/
@@ -453,7 +479,9 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
 ## 13. Pareceres AIOX
 
 - **Analyst:** aprova uso de fontes públicas com importação manual de contingência;
-  recomenda snapshots e não dependência de API não documentada.
+  recomenda snapshots e não dependência ampla de API não documentada. Por
+  decisão de produto em 2026-08-30, a recomendação foi restringida pela exceção
+  controlada do endpoint JSON exato do resultado mais recente da Lotofácil.
 - **PO:** `APPROVE_WITH_CONDITIONS`; aprova arquitetura e fundação. Exige fórmula
   executável, contrato CAIXA, método de cobertura e impressão física antes de
   geração de produção.
