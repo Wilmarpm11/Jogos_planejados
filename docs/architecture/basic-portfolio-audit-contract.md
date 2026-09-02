@@ -83,3 +83,55 @@ o determinismo, a compatibilidade da auditoria básica e a hierarquia CLI First.
 - Sequência do produto: esta capacidade não altera a ordem obrigatória
   geração → diversidade → auditoria de cobertura; ela é apenas o componente
   descritivo que poderá integrar a auditoria formal posterior.
+
+## Extensão estrutural planejada para a Story 4.5
+
+### Decisão de reutilização e restrição
+
+Reutilizar o contrato compartilhado de `StructuralSummary`, `StructuralBand` e
+`ExactFraction` em `@boloes/lottery-contracts`, a validação canônica de
+candidatos e o motor de agregação em `@boloes/audit-engine`. Não criar nova
+skill nem novo package. A agregação é reutilizável, mas a Story 4.5 conecta
+somente o adaptador da Lotofácil, composto pelo MetricEngine,
+StructuralClassifier e resumo estrutural já versionados em
+`@boloes/lottery-lotofacil`.
+
+O Core não importa o módulo Lotofácil. O motor recebe um adaptador explícito que
+transforma um candidato canônico em `StructuralSummary`; a camada CLI seleciona
+o adaptador pela modalidade. Outras modalidades só podem ser conectadas quando
+fornecerem suas próprias regras e versões, sem herdar limites E1–E10.
+
+### Contrato e comportamento
+
+O request público versionado preserva o envelope com `LotteryDefinition` e
+candidatos canônicos. Na primeira integração, `lotteryId` deve ser `lotofacil` e
+`betSize` deve ser 15; apostas de 16–20 e modalidades sem adaptador são
+rejeitadas explicitamente antes da agregação.
+
+O resultado contém versões do contrato, algoritmo, MetricEngine e classifier,
+`candidateCount` e os cinco buckets de `StructuralBand` em ordem canônica. Cada
+bucket informa contagem inteira e frequência exata com denominador derivado do
+total de candidatos, inclusive quando a contagem é zero. As contagens somam
+exatamente `candidateCount`. Não são materializados perfis individuais nem
+comparações com massa teórica, estratégia ou alocação solicitada.
+
+O processamento é assíncrono em lotes limitados. O progresso informa fase,
+`processedCandidates`, `totalCandidates` e percentual inteiro; o cancelamento
+cooperativo usa `AbortSignal`, lança erro tipado e não retorna resultado parcial.
+No CLI, progresso permanece em JSON Lines no `stderr` e o JSON final permanece
+sozinho no `stdout`.
+
+### Complexidade e fronteiras
+
+Para `n` candidatos e custo fixo do adaptador Lotofácil simples, o custo cresce
+linearmente em `n`; a saída ocupa `O(1)` para as cinco faixas, além da entrada já
+materializada. Essa operação não herda o teto de 1.000 da auditoria quadrática.
+
+O resultado é transitório, não persistido, não congelado, não calcula cobertura,
+não otimiza diversidade, não filtra ou reordena candidatos e não altera o estado
+da carteira. Núcleo central, sinais auxiliares, comparação com massa teórica e
+aderência à estratégia ficam fora desta primeira distribuição.
+
+**Gate de arquitetura:** aprovado para redação da Story 4.5, preservando CLI
+First, isolamento por modalidade e compatibilidade dos contratos das Stories
+4.3 e 4.4.

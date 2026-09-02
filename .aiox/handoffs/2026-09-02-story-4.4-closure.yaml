@@ -1,0 +1,26 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T14:00:52Z"
+  from_agent: "po"
+  to_agent: "pm"
+  last_command: "*close-story"
+  story_context:
+    story_id: "4.4"
+    story_path: "docs/stories/4.4.pairwise-portfolio-intersection-audit.story.md"
+    story_status: "Done"
+    qa_gate: "PASS"
+    reviewed_revision: "commit:575297c68ceea6d079e50cfd012b10da19b6e4f6"
+    pull_request: "https://github.com/Wilmarpm11/Jogos_planejados/pull/1"
+    branch: "main"
+  decisions:
+    - "Story 4.4 integrada por squash no commit 575297c68ceea6d079e50cfd012b10da19b6e4f6."
+    - "CodeRabbit remoto concluiu com SUCCESS, sem comentários acionáveis."
+    - "O gate QA PASS foi verificado novamente após o merge e vinculado ao squash commit."
+    - "Não existe artefato de epic/backlog local adicional; o Change Log da story recebeu a chave idempotente de fechamento."
+  files_modified:
+    - "docs/qa/gates/4.4-pairwise-portfolio-intersection-audit.yml"
+    - "docs/stories/4.4.pairwise-portfolio-intersection-audit.story.md"
+    - ".aiox/handoffs/2026-09-02-story-4.4-closure.yaml"
+  blockers: []
+  next_action: "Definir com Produto e Arquitetura a próxima fatia do FR-05 antes de o Scrum Master redigir a Story 4.5."
