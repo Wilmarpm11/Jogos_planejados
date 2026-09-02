@@ -1,0 +1,41 @@
+{
+  "story": "4.4",
+  "generatedAt": "2026-09-02",
+  "postCode": {
+    "status": "PASSED",
+    "checks": {
+      "SC-5.5.1": "PASS: nested pair loops use leftIndex < rightIndex and exact C(n,2) totals",
+      "SC-5.5.2": "PASS: 2, 1000, 1001, invalid candidates, duplicates and aborted signals are covered",
+      "SC-5.5.3": "PASS: validation and typed cancellation fail without returning partial results",
+      "SC-5.5.4": "PASS: strict local input, no network, database, credentials or dynamic code execution",
+      "SC-5.5.5": "PASS: SIGINT is cooperative and event listeners are removed in finally"
+    },
+    "issuesFound": 0,
+    "issuesFixed": 0
+  },
+  "postTest": {
+    "status": "PASSED",
+    "checks": {
+      "SC-6.5.1": "PASS: schemas, engine and CLI follow the existing Story 4.3 boundaries",
+      "SC-6.5.2": "PASS: product ceiling and algorithm version are named public constants; batch size is a named engine constant",
+      "SC-6.5.3": "PASS: unit, boundary, regression and subprocess integration scenarios pass",
+      "SC-6.5.4": "PASS: public APIs have comments and architecture/PRD are versioned",
+      "SC-6.5.5": "PASS: shared candidate validation was extracted and pair intersection has one responsibility",
+      "SC-6.5.6": "PASS: deterministic names, typed options and explicit transient markers document behavior"
+    },
+    "issuesFound": 1,
+    "issuesFixed": 1,
+    "fixes": [
+      "Imported the Vitest vi helper required by the preflight-progress assertion."
+    ],
+    "testsRerun": true
+  },
+  "qualityGates": {
+    "focused": "9 passed",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "regression": "19 files and 117 tests passed",
+    "coderabbit": "PASS: no functional findings; one generated project-status cache item refreshed"
+  },
+  "readyForReview": true
+}

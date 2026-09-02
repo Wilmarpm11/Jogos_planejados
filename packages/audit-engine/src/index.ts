@@ -1,8 +1,18 @@
 import {
   basicPortfolioAuditRequestSchema,
   basicPortfolioAuditResultSchema,
+  pairwisePortfolioAuditProgressSchema,
+  pairwisePortfolioAuditRequestSchema,
+  pairwisePortfolioAuditResultSchema,
+  PAIRWISE_PORTFOLIO_AUDIT_ALGORITHM_VERSION,
+  PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION,
   type BasicPortfolioAuditResult,
+  type PairwisePortfolioAuditProgress,
+  type PairwisePortfolioAuditResult,
+  type PairwisePortfolioIntersection,
 } from "@boloes/lottery-contracts";
+
+const PAIRWISE_AUDIT_BATCH_SIZE = 2_048;
 
 function pairKey(first: number, second: number): string {
   return `${first}:${second}`;
@@ -51,6 +61,63 @@ function validateCandidate(
   }
 }
 
+function validateCandidates(
+  definition: { totalNumbers: number; drawSize: number; minBetSize: number; maxBetSize: number },
+  candidates: readonly { readonly numbers: readonly number[] }[],
+): number {
+  validateDefinition(definition);
+  const betSize = candidates[0]!.numbers.length;
+  if (betSize < definition.minBetSize || betSize > definition.maxBetSize) {
+    throw new Error(`Candidate bet size ${betSize} is outside ${definition.minBetSize}-${definition.maxBetSize}.`);
+  }
+  candidates.forEach((candidate, candidateIndex) => {
+    validateCandidate(candidate.numbers, candidateIndex, betSize, definition.totalNumbers);
+  });
+  return betSize;
+}
+
+function intersectionSize(left: readonly number[], right: readonly number[]): number {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let size = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftNumber = left[leftIndex]!;
+    const rightNumber = right[rightIndex]!;
+    if (leftNumber === rightNumber) {
+      size += 1;
+      leftIndex += 1;
+      rightIndex += 1;
+    } else if (leftNumber < rightNumber) {
+      leftIndex += 1;
+    } else {
+      rightIndex += 1;
+    }
+  }
+  return size;
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+export class PairwisePortfolioAuditCancelledError extends Error {
+  readonly code = "PAIRWISE_PORTFOLIO_AUDIT_CANCELLED";
+
+  constructor() {
+    super("Pairwise portfolio audit cancelled.");
+    this.name = "AbortError";
+  }
+}
+
+export interface PairwisePortfolioAuditOptions {
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: PairwisePortfolioAuditProgress) => void;
+}
+
+function throwIfCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new PairwisePortfolioAuditCancelledError();
+}
+
 /**
  * Audits canonical candidates without history, persistence, optimization or
  * coverage. Its cost is O(candidateCount * betSize² + totalNumbers²).
@@ -58,14 +125,7 @@ function validateCandidate(
 export function auditBasicPortfolio(input: unknown): BasicPortfolioAuditResult {
   const request = basicPortfolioAuditRequestSchema.parse(input);
   const { lotteryDefinition, candidates } = request;
-  validateDefinition(lotteryDefinition);
-
-  const betSize = candidates[0]!.numbers.length;
-  if (betSize < lotteryDefinition.minBetSize || betSize > lotteryDefinition.maxBetSize) {
-    throw new Error(
-      `Candidate bet size ${betSize} is outside ${lotteryDefinition.minBetSize}-${lotteryDefinition.maxBetSize}.`,
-    );
-  }
+  const betSize = validateCandidates(lotteryDefinition, candidates);
 
   const numberCounts = Array.from({ length: lotteryDefinition.totalNumbers + 1 }, () => 0);
   const pairCounts = new Map<string, number>();
@@ -76,8 +136,7 @@ export function auditBasicPortfolio(input: unknown): BasicPortfolioAuditResult {
   }
 
   const gameOccurrences = new Map<string, { numbers: number[]; occurrences: number }>();
-  candidates.forEach((candidate, candidateIndex) => {
-    validateCandidate(candidate.numbers, candidateIndex, betSize, lotteryDefinition.totalNumbers);
+  candidates.forEach((candidate) => {
     for (const number of candidate.numbers) numberCounts[number]! += 1;
     for (let firstIndex = 0; firstIndex < betSize; firstIndex += 1) {
       for (let secondIndex = firstIndex + 1; secondIndex < betSize; secondIndex += 1) {
@@ -120,6 +179,71 @@ export function auditBasicPortfolio(input: unknown): BasicPortfolioAuditResult {
       pairOccurrences,
       expectedPairOccurrences: candidates.length * ((betSize * (betSize - 1)) / 2),
     },
+    transient: true,
+    persisted: false,
+    frozen: false,
+    coverageCalculated: false,
+    portfolioStateChanged: false,
+  });
+}
+
+/**
+ * Calculates every unordered candidate intersection in deterministic index
+ * order. Work is yielded in bounded batches so callers can cancel it.
+ */
+export async function auditPortfolioIntersections(
+  input: unknown,
+  options: PairwisePortfolioAuditOptions = {},
+): Promise<PairwisePortfolioAuditResult> {
+  const request = pairwisePortfolioAuditRequestSchema.parse(input);
+  const { lotteryDefinition, candidates } = request;
+  const betSize = validateCandidates(lotteryDefinition, candidates);
+  throwIfCancelled(options.signal);
+
+  const totalPairs = (candidates.length * (candidates.length - 1)) / 2;
+  const intersections: PairwisePortfolioIntersection[] = [];
+  const histogramCounts = Array.from({ length: betSize + 1 }, () => 0);
+  let processedPairs = 0;
+  let lastPercent = -1;
+
+  const emitProgress = (): void => {
+    const percent = Math.floor((processedPairs * 100) / totalPairs);
+    if (percent <= lastPercent) return;
+    lastPercent = percent;
+    options.onProgress?.(pairwisePortfolioAuditProgressSchema.parse({
+      phase: "PAIRWISE_INTERSECTIONS",
+      processedPairs,
+      totalPairs,
+      percent,
+    }));
+    throwIfCancelled(options.signal);
+  };
+
+  emitProgress();
+  for (let leftIndex = 0; leftIndex < candidates.length - 1; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
+      const size = intersectionSize(candidates[leftIndex]!.numbers, candidates[rightIndex]!.numbers);
+      intersections.push({ candidateIndexes: [leftIndex, rightIndex], intersectionSize: size });
+      histogramCounts[size]! += 1;
+      processedPairs += 1;
+      emitProgress();
+
+      if (processedPairs % PAIRWISE_AUDIT_BATCH_SIZE === 0 && processedPairs < totalPairs) {
+        await yieldToEventLoop();
+        throwIfCancelled(options.signal);
+      }
+    }
+  }
+
+  return pairwisePortfolioAuditResultSchema.parse({
+    contractVersion: PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION,
+    algorithmVersion: PAIRWISE_PORTFOLIO_AUDIT_ALGORITHM_VERSION,
+    lottery: { id: lotteryDefinition.id, definitionVersion: lotteryDefinition.version },
+    betSize,
+    candidateCount: candidates.length,
+    intersections,
+    overlapHistogram: histogramCounts.map((pairCount, size) => ({ intersectionSize: size, pairCount })),
+    totals: { expectedPairs: totalPairs, processedPairs },
     transient: true,
     persisted: false,
     frozen: false,

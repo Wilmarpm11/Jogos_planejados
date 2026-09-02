@@ -325,6 +325,61 @@ export const basicPortfolioAuditResultSchema = z.object({
 }).strict();
 export type BasicPortfolioAuditResult = z.infer<typeof basicPortfolioAuditResultSchema>;
 
+export const PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION = "1.0" as const;
+export const PAIRWISE_PORTFOLIO_AUDIT_ALGORITHM_VERSION = "pairwise-intersection/1.0.0" as const;
+export const PAIRWISE_PORTFOLIO_AUDIT_MIN_CANDIDATES = 2;
+export const PAIRWISE_PORTFOLIO_AUDIT_MAX_CANDIDATES = 1_000;
+
+/** Bounded input for the quadratic, transient intersection audit. */
+export const pairwisePortfolioAuditRequestSchema = z.object({
+  contractVersion: z.literal(PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION),
+  lotteryDefinition: lotteryDefinitionSchema,
+  candidates: z.array(basicPortfolioAuditCandidateSchema)
+    .min(PAIRWISE_PORTFOLIO_AUDIT_MIN_CANDIDATES)
+    .max(PAIRWISE_PORTFOLIO_AUDIT_MAX_CANDIDATES),
+}).strict();
+export type PairwisePortfolioAuditRequest = z.infer<typeof pairwisePortfolioAuditRequestSchema>;
+
+export const pairwisePortfolioAuditProgressSchema = z.object({
+  phase: z.literal("PAIRWISE_INTERSECTIONS"),
+  processedPairs: z.number().int().nonnegative(),
+  totalPairs: z.number().int().positive(),
+  percent: z.number().int().min(0).max(100),
+}).strict();
+export type PairwisePortfolioAuditProgress = z.infer<typeof pairwisePortfolioAuditProgressSchema>;
+
+const pairwiseIntersectionSchema = z.object({
+  candidateIndexes: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]),
+  intersectionSize: z.number().int().nonnegative(),
+}).strict();
+export type PairwisePortfolioIntersection = z.infer<typeof pairwiseIntersectionSchema>;
+
+const pairwiseOverlapHistogramBucketSchema = z.object({
+  intersectionSize: z.number().int().nonnegative(),
+  pairCount: z.number().int().nonnegative(),
+}).strict();
+
+export const pairwisePortfolioAuditResultSchema = z.object({
+  contractVersion: z.literal(PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION),
+  algorithmVersion: z.literal(PAIRWISE_PORTFOLIO_AUDIT_ALGORITHM_VERSION),
+  lottery: z.object({ id: z.string().min(1), definitionVersion: z.string().min(1) }).strict(),
+  betSize: z.number().int().positive(),
+  candidateCount: z.number().int().min(PAIRWISE_PORTFOLIO_AUDIT_MIN_CANDIDATES)
+    .max(PAIRWISE_PORTFOLIO_AUDIT_MAX_CANDIDATES),
+  intersections: z.array(pairwiseIntersectionSchema),
+  overlapHistogram: z.array(pairwiseOverlapHistogramBucketSchema),
+  totals: z.object({
+    expectedPairs: z.number().int().positive(),
+    processedPairs: z.number().int().positive(),
+  }).strict(),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict();
+export type PairwisePortfolioAuditResult = z.infer<typeof pairwisePortfolioAuditResultSchema>;
+
 export interface DeterministicRandom {
   nextInt(upperExclusive: number): number;
 }
