@@ -1,19 +1,17 @@
 status:
-  branch: main
+  branch: feature/4.4-pairwise-portfolio-intersection-audit
   modifiedFiles:
     - .ai/decision-logs-index.md
-    - .aiox/project-status.yaml
-    - apps/cli/src/index.ts
-    - docs/architecture/basic-portfolio-audit-contract.md
-    - docs/prd.md
-  modifiedFilesTotalCount: 14
+    - docs/stories/4.4.pairwise-portfolio-intersection-audit.story.md
+    - tests/audit-engine/pairwise-portfolio-intersection-audit.test.ts
+  modifiedFilesTotalCount: 3
   recentCommits:
+    - 'feat: add pairwise portfolio intersection audit'
     - 'feat: complete Lotofacil pipeline through portfolio audit'
-    - Merge remote-tracking branch 'origin/main'
   currentEpic: null
   currentStory: null
-  lastUpdate: '2026-09-02T13:17:14.779Z'
+  lastUpdate: '2026-09-02T13:26:12.885Z'
   isGitRepo: true
-timestamp: 1788355034782
+timestamp: 1788355572886
 ttl: 60
-gitFingerprint: 1788018569570.6733:1788137121005.6233
+gitFingerprint: 1788355269423.334:1788355308864.645

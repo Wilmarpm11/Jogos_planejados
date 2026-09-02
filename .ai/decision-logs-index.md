@@ -8,7 +8,7 @@
 ## Quick Links
 
 - [Decision Logging Guide](../docs/guides/decision-logging-guide.md)
-- [Core Configuration](.aiox-core/core-config.yaml)
+- [Core Configuration](../.aiox-core/core-config.yaml)
 
 ---
 

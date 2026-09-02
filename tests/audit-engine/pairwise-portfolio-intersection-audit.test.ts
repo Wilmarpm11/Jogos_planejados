@@ -194,7 +194,13 @@ describe("pairwise portfolio intersection audit", () => {
       ),
     });
 
-    const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }>((resolve) => {
+    const outcome = await new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      signalSent: boolean;
+      stdout: string;
+      stderr: string;
+    }>((resolve) => {
       const child = spawn(
         process.execPath,
         ["--import", "tsx", "apps/cli/src/index.ts", "portfolio", "audit-intersections", "--input", inputPath],
@@ -203,19 +209,21 @@ describe("pairwise portfolio intersection audit", () => {
       let stdout = "";
       let stderr = "";
       let interrupted = false;
+      let signalSent = false;
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => { stdout += chunk; });
       child.stderr.on("data", (chunk: string) => {
         stderr += chunk;
-        if (!interrupted && stderr.includes("PAIRWISE_INTERSECTIONS")) {
+        if (!interrupted && stderr.includes('"processedPairs":0')) {
           interrupted = true;
-          child.kill("SIGINT");
+          signalSent = child.exitCode === null && child.signalCode === null && child.kill("SIGINT");
         }
       });
-      child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
+      child.on("close", (code, signal) => resolve({ code, signal, signalSent, stdout, stderr }));
     });
 
+    expect(outcome.signalSent).toBe(true);
     expect(outcome.signal).toBeNull();
     expect(outcome.code).toBe(130);
     expect(outcome.stdout).toBe("");
