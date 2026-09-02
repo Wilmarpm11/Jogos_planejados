@@ -17,6 +17,7 @@ import {
   persistHistoricalMetricProfiles,
 } from "@boloes/data-access";
 import {
+  CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
   manualDatasetImportSchema,
   basicPortfolioAuditRequestSchema,
   exactCoverageAuditRequestSchema,
@@ -54,6 +55,7 @@ import {
 import { deriveLotofacilHistoricalMetricProfile } from "@boloes/statistics-engine";
 import {
   calculateLotofacilAxisOccupancy,
+  expandLotofacilCanonicalBet,
   getLotofacilCanonicalFormulaManifest,
   calculateLotofacilMetricProfile,
   calculateLotofacilStructuralMass,
@@ -61,6 +63,7 @@ import {
   generateLotofacilPortfolio,
   lotofacilPortfolioStructuralDistributionAdapter,
   lotofacilExactCoverageAdapter,
+  LOTOFACIL_DEFINITION,
   summarizeLotofacilStructuralProfile,
   LOTOFACIL_SPECIAL_DRAW_TYPES,
   validateLotofacilStructuralAllocation,
@@ -124,6 +127,8 @@ Comandos:
                        Audita a distribuição estrutural Lotofácil com progresso e cancelamento locais.
   portfolio audit-coverage --input PATH
                        Audita cobertura exata Lotofácil 12+ com progresso, timeout e cancelamento locais.
+  lotofacil expand --numbers 01,02,...
+                       Expande uma aposta de 15–20 dezenas em combinações simples de 15.
   lotofacil occupancy --numbers 01,02,...
                        Calcula ocupação de linhas e colunas para 15–20 dezenas.
   lotofacil metrics --numbers 01,02,...
@@ -584,6 +589,26 @@ if (command === "help" || command === "--help" || command === "-h") {
       process.exitCode = exactCoverageAuditExitCode(error);
     } finally {
       process.off("SIGINT", cancelOnSigint);
+    }
+  }
+} else if (command === "lotofacil" && process.argv[3] === "expand") {
+  const value = argumentValue("--numbers");
+  if (!value) {
+    process.stderr.write("Informe --numbers com dezenas separadas por vírgula.\n");
+    process.exitCode = 1;
+  } else {
+    try {
+      const numbers = value.split(",").map((part) => Number(part.trim()));
+      process.stdout.write(JSON.stringify(expandLotofacilCanonicalBet({
+        contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+        lotteryDefinition: LOTOFACIL_DEFINITION,
+        sourceBet: { numbers },
+      })) + "\n");
+    } catch (error) {
+      process.stderr.write(
+        (error instanceof Error ? error.message : "Entrada inválida.") + "\n",
+      );
+      process.exitCode = 1;
     }
   }
 } else if (command === "lotofacil" && process.argv[3] === "occupancy") {

@@ -18,6 +18,7 @@
 | 2026-09-02 | 0.4.5 | Gate operacional da auditoria quadrática: teto, progresso, cancelamento e rejeição em preflight | Produto |
 | 2026-09-02 | 0.4.6 | Primeira distribuição estrutural de carteira restrita à Lotofácil simples, com agregação exata, progresso e cancelamento | Produto / Arquitetura |
 | 2026-09-02 | 0.4.7 | Gate da cobertura única: método exato 12+, teto de 1.000 jogos simples, timeout de 30 s e erro zero | Produto / Arquitetura |
+| 2026-09-02 | 0.4.8 | Primeira expansão canônica Lotofácil restrita a uma aposta de 15–20, materializada em combinações simples de 15 | Produto / Arquitetura |
 
 ## 1. Objetivo e contexto
 
@@ -184,6 +185,14 @@ relativo zero. A execução tem timeout rígido de 30 segundos, progresso e
 cancelamento cooperativo; timeout ou cancelamento não publica resultado parcial.
 Apostas de 16–20 dezenas, aproximação, persistência, congelamento e mudança de
 estado permanecem fora desta primeira entrega.
+
+Na primeira entrega de expansão, a ação recebe exatamente uma aposta
+canônica Lotofácil de 15–20 dezenas e materializa todas as suas combinações
+simples de 15 em ordem lexicográfica estável. Uma aposta simples retorna sua
+própria identidade; as contagens para 16–20 seguem a seção 7.4. O resultado é
+transitório e não agrega carteira, calcula cobertura, consulta preço/cotas,
+persiste ou congela estado. Outras modalidades e integração da expansão com a
+auditoria de cobertura permanecem fora desta primeira entrega.
 
 ### FR-06 - Bolão mínimo
 
