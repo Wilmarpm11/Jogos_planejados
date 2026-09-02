@@ -68,6 +68,8 @@ da modalidade, sem histórico, estratégia, cobertura, persistência ou estado.
 - `git diff --check` — PASS
 - CodeRabbit local — 2 achados corrigidos (1 major, 1 minor); verificação final
   com 0 achados
+- CodeRabbit do commit contra `main` — 0 achados
+- QA gate — PASS, qualidade 100 e AC 1–8 cobertos
 
 ## Consequences
 
