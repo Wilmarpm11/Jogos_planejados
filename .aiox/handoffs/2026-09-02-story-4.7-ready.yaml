@@ -1,0 +1,28 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T21:02:49Z"
+  from_agent: "po"
+  to_agent: "dev"
+  last_command: "*validate-story-draft"
+  story_context:
+    story_id: "4.7"
+    story_path: "docs/stories/4.7.lotofacil-canonical-bet-expansion.story.md"
+    story_status: "Ready"
+    priority: "P0"
+    branch: "feature/4.7-lotofacil-canonical-bet-expansion"
+  decisions:
+    - "Concluir primeiro a fronteira de expansão pendente no Epic 4; custo/cotas FR-06 permanece posterior."
+    - "Criar contrato reutilizável em lottery-contracts, reutilizar combinatorics e implementar o adaptador Lotofácil; não criar skill ou package."
+    - "Restringir a versão 1.0 a uma aposta-fonte Lotofácil 15–20 e materializar C(k,15) candidatos simples em ordem lexicográfica."
+    - "Manter a cobertura 4.6 inalterada; integração de várias fontes e cobertura expandida exigem story própria."
+    - "Não incluir rede, banco, histórico, estratégia, custo/cotas, persistência, congelamento, impressão ou UI."
+  files_modified:
+    - "docs/prd.md"
+    - "docs/architecture/lotofacil-canonical-bet-expansion-contract.md"
+    - "docs/stories/4.7.lotofacil-canonical-bet-expansion.story.md"
+    - ".ai/story-validation-4.7.json"
+    - ".aiox/handoffs/2026-09-02-story-4.6-closure.yaml"
+    - ".aiox/handoffs/2026-09-02-story-4.7-ready.yaml"
+  blockers: []
+  next_action: "Usar @dev *develop 4.7; implementar somente após consumir este handoff."

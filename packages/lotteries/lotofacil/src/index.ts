@@ -1,4 +1,6 @@
 import {
+  CANONICAL_BET_EXPANSION_ALGORITHM_VERSION,
+  CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
   DEFAULT_RARITY_THRESHOLDS,
   EXACT_COVERAGE_TIERS,
   STRUCTURAL_BAND_ORDER,
@@ -7,6 +9,10 @@ import {
   type AxisOccupancyMetric,
   type AxisRarityAssessment,
   createDeterministicRandom,
+  canonicalBetExpansionRequestSchema,
+  validateCanonicalBetExpansionResult,
+  type CanonicalBetExpansionAdapter,
+  type CanonicalBetExpansionResult,
   type ExactFraction,
   type ExactCoverageAdapter,
   type RarityClass,
@@ -25,7 +31,11 @@ import {
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
 } from "@boloes/lottery-contracts";
-import { createCombinationRanker, forEachCombination } from "@boloes/combinatorics";
+import {
+  binomialCoefficient,
+  createCombinationRanker,
+  forEachCombination,
+} from "@boloes/combinatorics";
 import {
   CONTRACT_VERSION,
   HASH_ALGORITHM,
@@ -274,6 +284,54 @@ function isLotofacilDefinition(definition: LotteryDefinition): boolean {
 function canonicalGameOrder(left: readonly number[], right: readonly number[]): number {
   return left.join(",").localeCompare(right.join(","));
 }
+
+/** Expands one canonical Lotofácil source bet into all simple 15-number bets. */
+export function expandLotofacilCanonicalBet(
+  input: unknown,
+): CanonicalBetExpansionResult {
+  const request = canonicalBetExpansionRequestSchema.parse(input);
+  if (!isLotofacilDefinition(request.lotteryDefinition)) {
+    throw new Error("Lotofácil expansion requires the canonical 25/15 definition version 1.0.0.");
+  }
+
+  const sourceNumbers = request.sourceBet.numbers;
+  if (!isSupportedBetSize(sourceNumbers.length)) {
+    throw new Error("Lotofácil expansion supports source bets with 15 to 20 numbers.");
+  }
+
+  const candidates: Array<{ numbers: number[] }> = [];
+  forEachCombination(sourceNumbers.length, LOTOFACIL_DEFINITION.drawSize, (indexes) => {
+    candidates.push({ numbers: indexes.map((index) => sourceNumbers[index]!) });
+  });
+
+  return validateCanonicalBetExpansionResult(request, {
+    contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+    algorithmVersion: CANONICAL_BET_EXPANSION_ALGORITHM_VERSION,
+    lottery: {
+      id: LOTOFACIL_ID,
+      definitionVersion: LOTOFACIL_DEFINITION.version,
+    },
+    sourceBet: { numbers: [...sourceNumbers] },
+    sourceBetSize: sourceNumbers.length,
+    simpleBetSize: LOTOFACIL_DEFINITION.drawSize,
+    expectedCandidateCount: binomialCoefficient(
+      sourceNumbers.length,
+      LOTOFACIL_DEFINITION.drawSize,
+    ),
+    candidates,
+    transient: true,
+    persisted: false,
+    frozen: false,
+    coverageCalculated: false,
+    portfolioStateChanged: false,
+  });
+}
+
+export const lotofacilCanonicalBetExpansionAdapter: CanonicalBetExpansionAdapter = {
+  lotteryId: LOTOFACIL_ID,
+  supportsDefinition: isLotofacilDefinition,
+  expand: expandLotofacilCanonicalBet,
+};
 
 /**
  * Generates a transient deterministic set of Lotofácil simple bets. Neutral

@@ -1,3 +1,4 @@
+import { binomialCoefficient } from "@boloes/combinatorics";
 import { z } from "zod";
 
 export const lotteryDefinitionSchema = z.object({
@@ -273,6 +274,272 @@ export interface PortfolioGenerationResult {
   readonly frozen: false;
   readonly coverageCalculated: false;
   readonly probabilityClaimed: false;
+}
+
+export const CANONICAL_BET_EXPANSION_CONTRACT_VERSION = "1.0" as const;
+export const CANONICAL_BET_EXPANSION_ALGORITHM_VERSION =
+  "canonical-subset-enumeration/1.0.0" as const;
+export const CANONICAL_BET_EXPANSION_MAX_CANDIDATES = 15_504;
+
+const canonicalBetExpansionBetSchema = z.object({
+  numbers: z.array(z.number().int().positive()).min(1),
+}).strict();
+
+/** Modality-neutral input boundary for expanding one canonical source bet. */
+export const canonicalBetExpansionRequestSchema = z.object({
+  contractVersion: z.literal(CANONICAL_BET_EXPANSION_CONTRACT_VERSION),
+  lotteryDefinition: lotteryDefinitionSchema.strict(),
+  sourceBet: canonicalBetExpansionBetSchema,
+}).strict().superRefine((request, context) => {
+  const { lotteryDefinition: definition, sourceBet } = request;
+  if (
+    definition.drawSize > definition.totalNumbers ||
+    definition.drawSize > definition.minBetSize ||
+    definition.minBetSize > definition.maxBetSize ||
+    definition.maxBetSize > definition.totalNumbers
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["lotteryDefinition"],
+      message: "Lottery dimensions and bet-size bounds must be ordered within the number universe.",
+    });
+  }
+  if (
+    sourceBet.numbers.length < definition.minBetSize ||
+    sourceBet.numbers.length > definition.maxBetSize
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["sourceBet", "numbers"],
+      message: `Source bet size must be within ${definition.minBetSize}-${definition.maxBetSize}.`,
+    });
+  }
+  sourceBet.numbers.forEach((number, index) => {
+    if (number > definition.totalNumbers) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceBet", "numbers", index],
+        message: `Source bet numbers must be within 1-${definition.totalNumbers}.`,
+      });
+    }
+    if (index > 0 && number <= sourceBet.numbers[index - 1]!) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceBet", "numbers", index],
+        message: "Source bet numbers must be unique and in strictly ascending order.",
+      });
+    }
+  });
+  if (
+    definition.drawSize <= sourceBet.numbers.length &&
+    sourceBet.numbers.length <= definition.totalNumbers
+  ) {
+    try {
+      const expectedCandidateCount = binomialCoefficient(
+        sourceBet.numbers.length,
+        definition.drawSize,
+      );
+      if (expectedCandidateCount > CANONICAL_BET_EXPANSION_MAX_CANDIDATES) {
+        context.addIssue({
+          code: "custom",
+          path: ["sourceBet", "numbers"],
+          message: `Canonical expansion is limited to ${CANONICAL_BET_EXPANSION_MAX_CANDIDATES} materialized candidates.`,
+        });
+      }
+    } catch {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceBet", "numbers"],
+        message: "The canonical expansion workload must fit the safe integer range.",
+      });
+    }
+  }
+});
+export type CanonicalBetExpansionRequest = z.infer<typeof canonicalBetExpansionRequestSchema>;
+
+function compareCanonicalNumberSequences(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  const sharedLength = Math.min(left.length, right.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    const difference = left[index]! - right[index]!;
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
+}
+
+/** Strict result boundary shared by lottery-specific expansion adapters. */
+export const canonicalBetExpansionResultSchema = z.object({
+  contractVersion: z.literal(CANONICAL_BET_EXPANSION_CONTRACT_VERSION),
+  algorithmVersion: z.literal(CANONICAL_BET_EXPANSION_ALGORITHM_VERSION),
+  lottery: z.object({
+    id: z.string().min(1),
+    definitionVersion: z.string().min(1),
+  }).strict(),
+  sourceBet: canonicalBetExpansionBetSchema,
+  sourceBetSize: z.number().int().positive(),
+  simpleBetSize: z.number().int().positive(),
+  expectedCandidateCount: z.number().int().positive(),
+  candidates: z.array(canonicalBetExpansionBetSchema).min(1),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict().superRefine((result, context) => {
+  if (result.sourceBet.numbers.length !== result.sourceBetSize) {
+    context.addIssue({
+      code: "custom",
+      path: ["sourceBetSize"],
+      message: "Source bet size must match the source numbers.",
+    });
+  }
+  result.sourceBet.numbers.forEach((number, index) => {
+    if (index > 0 && number <= result.sourceBet.numbers[index - 1]!) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceBet", "numbers", index],
+        message: "Source bet numbers must be unique and in strictly ascending order.",
+      });
+    }
+  });
+  if (result.simpleBetSize > result.sourceBetSize) {
+    context.addIssue({
+      code: "custom",
+      path: ["simpleBetSize"],
+      message: "Simple bet size cannot exceed source bet size.",
+    });
+  }
+  if (result.candidates.length !== result.expectedCandidateCount) {
+    context.addIssue({
+      code: "custom",
+      path: ["candidates"],
+      message: "Materialized candidates must match the expected count.",
+    });
+  }
+  if (result.simpleBetSize <= result.sourceBetSize) {
+    try {
+      const derivedCandidateCount = binomialCoefficient(
+        result.sourceBetSize,
+        result.simpleBetSize,
+      );
+      if (result.expectedCandidateCount !== derivedCandidateCount) {
+        context.addIssue({
+          code: "custom",
+          path: ["expectedCandidateCount"],
+          message: "Expected candidate count must equal C(sourceBetSize, simpleBetSize).",
+        });
+      }
+    } catch {
+      context.addIssue({
+        code: "custom",
+        path: ["expectedCandidateCount"],
+        message: "The derived candidate count must fit the safe integer range.",
+      });
+    }
+  }
+
+  const sourceNumbers = new Set(result.sourceBet.numbers);
+  const identities = new Set<string>();
+  result.candidates.forEach((candidate, candidateIndex) => {
+    if (candidate.numbers.length !== result.simpleBetSize) {
+      context.addIssue({
+        code: "custom",
+        path: ["candidates", candidateIndex, "numbers"],
+        message: "Every candidate must use the declared simple bet size.",
+      });
+    }
+    candidate.numbers.forEach((number, numberIndex) => {
+      if (!sourceNumbers.has(number)) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidates", candidateIndex, "numbers", numberIndex],
+          message: "Every candidate number must belong to the source bet.",
+        });
+      }
+      if (numberIndex > 0 && number <= candidate.numbers[numberIndex - 1]!) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidates", candidateIndex, "numbers", numberIndex],
+          message: "Candidate numbers must be unique and in strictly ascending order.",
+        });
+      }
+    });
+
+    const identity = candidate.numbers.join(",");
+    if (identities.has(identity)) {
+      context.addIssue({
+        code: "custom",
+        path: ["candidates", candidateIndex],
+        message: "Expanded candidates must be unique.",
+      });
+    }
+    identities.add(identity);
+
+    if (
+      candidateIndex > 0 &&
+      compareCanonicalNumberSequences(
+        result.candidates[candidateIndex - 1]!.numbers,
+        candidate.numbers,
+      ) >= 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["candidates", candidateIndex],
+        message: "Expanded candidates must use stable lexicographic order.",
+      });
+    }
+  });
+});
+export type CanonicalBetExpansionResult = z.infer<typeof canonicalBetExpansionResultSchema>;
+
+/** Request-scoped boundary that prevents a valid result from being attached to another input. */
+export const canonicalBetExpansionExecutionSchema = z.object({
+  request: canonicalBetExpansionRequestSchema,
+  result: canonicalBetExpansionResultSchema,
+}).strict().superRefine(({ request, result }, context) => {
+  if (
+    result.lottery.id !== request.lotteryDefinition.id ||
+    result.lottery.definitionVersion !== request.lotteryDefinition.version
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["result", "lottery"],
+      message: "Expansion result lottery must match the originating request.",
+    });
+  }
+  if (result.simpleBetSize !== request.lotteryDefinition.drawSize) {
+    context.addIssue({
+      code: "custom",
+      path: ["result", "simpleBetSize"],
+      message: "Expansion simple bet size must match the lottery draw size.",
+    });
+  }
+  if (
+    result.sourceBet.numbers.length !== request.sourceBet.numbers.length ||
+    result.sourceBet.numbers.some((number, index) => number !== request.sourceBet.numbers[index])
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["result", "sourceBet"],
+      message: "Expansion result source bet must match the originating request.",
+    });
+  }
+});
+
+export function validateCanonicalBetExpansionResult(
+  request: CanonicalBetExpansionRequest,
+  result: unknown,
+): CanonicalBetExpansionResult {
+  return canonicalBetExpansionExecutionSchema.parse({ request, result }).result;
+}
+
+/** Reusable contract implemented by lottery-owned canonical expansion adapters. */
+export interface CanonicalBetExpansionAdapter {
+  readonly lotteryId: string;
+  supportsDefinition(definition: LotteryDefinition): boolean;
+  expand(request: CanonicalBetExpansionRequest): CanonicalBetExpansionResult;
 }
 
 export const basicPortfolioAuditCandidateSchema = z.object({

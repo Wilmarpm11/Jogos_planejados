@@ -1,0 +1,34 @@
+{
+  "story": "4.7",
+  "path": "docs/stories/4.7.lotofacil-canonical-bet-expansion.story.md",
+  "validatedAt": "2026-09-02",
+  "validator": "@po",
+  "verdict": "GO",
+  "score": 10,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "executorAssignment": "PASS",
+    "fileStructure": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "securityApplicability": "PASS",
+    "taskSequence": "PASS",
+    "codeRabbitIntegration": "PASS",
+    "antiHallucination": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "niceToHave": [],
+  "notes": [
+    "Code intelligence auto-check skipped because no provider is active.",
+    "The configured PRD and architecture shard indexes are absent; monolithic documents and the directly related expansion contract were validated instead.",
+    "The expansion counts, canonical ordering and one-bet operational bound were cross-checked against PRD section 7.4 and the existing combinatorics contract.",
+    "ClickUp synchronization is disabled by mcp.enabled=false; the local story is the source of truth."
+  ]
+}
