@@ -1,0 +1,23 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-08-31T00:50:00Z"
+  from_agent: "po"
+  to_agent: "pm"
+  last_command: "*backlog-summary"
+  story_context:
+    story_id: "4.4"
+    story_path: ""
+    story_status: "Not drafted"
+    current_task: "Definir o gate NFR-04 e então redigir a próxima fatia do Epic 4."
+    branch: "main"
+  decisions:
+    - "Stories 1.1, 2.1–2.5, 3.1–3.12 e 4.1–4.3 estão Done; origin/main aponta para 98c5723."
+    - "A próxima fatia indicada pela Story 4.3 é interseção par a par e histograma de sobreposição."
+    - "Antes do código, Produto e Arquitetura devem definir candidateCount máximo, progresso, cancelamento e comportamento ao exceder o limite, conforme NFR-04."
+    - "Reutilizar audit-engine e o contrato público versionado; não criar skill dedicada sem nova necessidade por modalidade."
+  files_modified:
+    - ".aiox/handoffs/2026-08-31-epic-4-next-step.yaml"
+  blockers:
+    - "Política operacional para cálculo quadrático ainda não está definida nos artefatos."
+  next_action: "Retomar com @pm/@architect para fechar o gate NFR-04. Depois usar @sm para criar a Story 4.4 e @po para validá-la antes de qualquer implementação."

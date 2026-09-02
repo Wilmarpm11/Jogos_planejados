@@ -39,6 +39,40 @@ O PRD não define um máximo operacional de candidatos. Portanto, esta decisão
 não cria um limite numérico; progresso, cancelamento e política de recursos
 permanecem como decisão própria antes de classificar a operação como pesada.
 
+## Extensão quadrática aprovada para a Story 4.4
+
+A política de produto do PRD v0.4.5 fecha o gate do NFR-04. A auditoria de
+interseções reutiliza `@boloes/audit-engine` e o contrato público versionado em
+`@boloes/lottery-contracts`; não cria package, skill ou regra por modalidade.
+A auditoria básica `1.0` permanece compatível e sem o teto da operação
+quadrática.
+
+O novo contrato `1.0` recebe de 2 a 1.000 candidatos canônicos e rejeita o
+excesso no schema, antes de iniciar o cálculo. O resultado contém, em ordem
+lexicográfica de índices `i < j`, o tamanho da interseção de cada par, além de
+um histograma completo de `0` a `betSize`, inclusive buckets com zero. Também
+declara `algorithmVersion`, `candidateCount`, total esperado/processado de
+pares e os mesmos marcadores transitórios da auditoria básica. Não calcula
+cobertura, eficiência, probabilidade, otimização ou estado de carteira.
+
+Para que o cancelamento seja observável no CLI, a implementação é assíncrona e
+cede o event loop entre lotes limitados. Um `AbortSignal` é consultado antes do
+primeiro lote e entre lotes; cancelamento lança erro tipado e não devolve
+resultado parcial. O callback de progresso emite estado inicial, avanços
+monotônicos e conclusão com `processedPairs`, `totalPairs` e percentual inteiro.
+O CLI escreve esses eventos como JSON Lines em `stderr`, reserva `stdout` para o
+resultado final e converte `SIGINT` em cancelamento cooperativo.
+
+Para `n` candidatos de tamanho `k`, o custo é `O(n² × k)` e a memória de saída
+é `O(n² + k)`. O motor usa interseção de duas sequências canônicas por dois
+ponteiros, sem criar conjuntos por par. O teto de 1.000 limita uma execução a
+`C(1000,2) = 499.500` pares. A versão do algoritmo e o limite máximo são
+constantes públicas; qualquer aumento do teto exige nova decisão de produto e
+evidência de tempo e memória, sem alterar silenciosamente o contrato `1.0`.
+
+**Gate de arquitetura:** aprovado. A extensão preserva as fronteiras do Core,
+o determinismo, a compatibilidade da auditoria básica e a hierarquia CLI First.
+
 ## Consequências
 
 - Reuso: outras modalidades podem usar o mesmo motor com sua definição.

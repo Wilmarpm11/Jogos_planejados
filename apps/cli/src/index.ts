@@ -19,10 +19,15 @@ import {
 import {
   manualDatasetImportSchema,
   basicPortfolioAuditRequestSchema,
+  pairwisePortfolioAuditRequestSchema,
   portfolioGenerationRequestSchema,
   type DatasetSnapshot,
 } from "@boloes/lottery-contracts";
-import { auditBasicPortfolio } from "@boloes/audit-engine";
+import {
+  auditBasicPortfolio,
+  auditPortfolioIntersections,
+  PairwisePortfolioAuditCancelledError,
+} from "@boloes/audit-engine";
 import {
   LOTOFACIL_CAIXA_PAGE_PARSER_VERSION,
   LOTOFACIL_CAIXA_PAGE_URL,
@@ -102,6 +107,8 @@ Comandos:
                        Gera candidatos Lotofácil localmente, sem persistir, cobrir ou congelar carteira.
   portfolio audit-basic --input PATH
                        Audita validade, duplicidade e frequências sem persistir ou calcular cobertura.
+  portfolio audit-intersections --input PATH
+                       Audita interseções par a par com progresso e cancelamento locais.
   lotofacil occupancy --numbers 01,02,...
                        Calcula ocupação de linhas e colunas para 15–20 dezenas.
   lotofacil metrics --numbers 01,02,...
@@ -490,6 +497,27 @@ if (command === "help" || command === "--help" || command === "-h") {
       const request = basicPortfolioAuditRequestSchema.parse(JSON.parse(readFileSync(resolve(inputPath), "utf8")));
       process.stdout.write(JSON.stringify(auditBasicPortfolio(request)) + "\n");
     } catch (error) { process.stderr.write((error instanceof Error ? error.message : "Solicitação de auditoria inválida.") + "\n"); process.exitCode = 1; }
+  }
+} else if (command === "portfolio" && process.argv[3] === "audit-intersections") {
+  const inputPath = argumentValue("--input");
+  if (!inputPath) { process.stderr.write("Informe --input com os candidatos para auditoria.\n"); process.exitCode = 1; }
+  else {
+    const cancellation = new AbortController();
+    const cancelOnSigint = (): void => cancellation.abort();
+    process.once("SIGINT", cancelOnSigint);
+    try {
+      const request = pairwisePortfolioAuditRequestSchema.parse(JSON.parse(readFileSync(resolve(inputPath), "utf8")));
+      const result = await auditPortfolioIntersections(request, {
+        signal: cancellation.signal,
+        onProgress: (progress) => process.stderr.write(JSON.stringify(progress) + "\n"),
+      });
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch (error) {
+      process.stderr.write((error instanceof Error ? error.message : "Solicitação de auditoria inválida.") + "\n");
+      process.exitCode = error instanceof PairwisePortfolioAuditCancelledError ? 130 : 1;
+    } finally {
+      process.off("SIGINT", cancelOnSigint);
+    }
   }
 } else if (command === "lotofacil" && process.argv[3] === "occupancy") {
   const value = argumentValue("--numbers");

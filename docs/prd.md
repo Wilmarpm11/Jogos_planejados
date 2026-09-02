@@ -15,6 +15,7 @@
 | 2026-08-29 | 0.4.2 | Removidos exemplos de carteira de teste; fórmula como única referência canônica | PM / AIOX |
 | 2026-08-29 | 0.4.3 | Ocupação de linhas/colunas normalizada por tamanho de aposta (15–20) e raridade teórica por universo | PM / AIOX |
 | 2026-08-30 | 0.4.4 | Modo avançado, coorte contextual, estratégia manual experimental e comparação pré-geração | Produto |
+| 2026-09-02 | 0.4.5 | Gate operacional da auditoria quadrática: teto, progresso, cancelamento e rejeição em preflight | Produto |
 
 ## 1. Objetivo e contexto
 
@@ -204,7 +205,14 @@ CAIXA, isolado do Core matemático e do renderizador A4.
 - **NFR-03 - Local-first:** banco SQLite local, cache e uso do último snapshot
   válido quando a sincronização falhar.
 - **NFR-04 - Performance:** cálculos pesados mostram progresso e cancelamento;
-  cobertura declara exatidão/estimativa.
+  cobertura declara exatidão/estimativa. Na primeira auditoria de interseções
+  par a par, cada execução aceita no máximo 1.000 candidatos, equivalentes a
+  499.500 pares não ordenados. Até esse teto, o progresso informa unidades
+  processadas, total e percentual, e o cancelamento cooperativo encerra a
+  operação sem publicar resultado parcial. Acima do teto, a solicitação é
+  rejeitada antes do cálculo com erro explícito e determinístico. O limite vale
+  somente para a operação quadrática e qualquer aumento exige nova decisão
+  versionada acompanhada de evidência de desempenho e consumo de memória.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
   por template.
 - **NFR-06 - Licença:** derivados do INJOLOCA obedecem GPL-3.0-or-later.

@@ -1,0 +1,46 @@
+schema: 1
+story: '4.4'
+story_title: 'Auditoria de interseções par a par e histograma de sobreposição'
+gate: PASS
+status_reason: 'Os AC 1–8 estão cobertos; o teto de 1.000, o progresso monotônico, o cancelamento cooperativo e a separação dos streams foram verificados sem regressão da auditoria básica.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree:sha256:4909ed0a10bfdc32c941858b682ff2de7a2542cc9f01761ad1d89d01e0e77c00'
+updated: '2026-09-02T13:09:34Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+evidence:
+  tests_reviewed: 9
+  regression_tests_passed: 117
+  test_files_passed: 19
+  coderabbit_story_findings: 2
+  coderabbit_blocking_findings: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+risk_summary:
+  totals:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 2
+  highest_score: 3
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Schema estrito e arquivo local; nenhuma rede, banco, credencial ou execução dinâmica.'
+  performance:
+    status: PASS
+    notes: 'Custo O(n²*k) documentado e limitado a 499.500 pares; o teste de teto executa a operação completa.'
+  reliability:
+    status: PASS
+    notes: 'Progresso inicial/monotônico/final, AbortSignal e SIGINT foram testados sem resultado parcial.'
+  maintainability:
+    status: PASS
+    notes: 'Contrato, motor, CLI e testes permanecem separados; a auditoria básica 1.0 conserva o comportamento.'
+recommendations:
+  immediate: []
+  future:
+    - action: 'Exigir nova decisão versionada e evidência de tempo/memória antes de elevar o teto de 1.000.'
+      refs: ['docs/prd.md:NFR-04', 'docs/architecture/basic-portfolio-audit-contract.md']
