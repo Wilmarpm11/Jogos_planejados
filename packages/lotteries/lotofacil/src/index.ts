@@ -1,5 +1,6 @@
 import {
   DEFAULT_RARITY_THRESHOLDS,
+  EXACT_COVERAGE_TIERS,
   STRUCTURAL_BAND_ORDER,
   type AxisName,
   type AxisOccupancy,
@@ -7,6 +8,7 @@ import {
   type AxisRarityAssessment,
   createDeterministicRandom,
   type ExactFraction,
+  type ExactCoverageAdapter,
   type RarityClass,
   type RarityThresholds,
   type LotteryDefinition,
@@ -23,7 +25,7 @@ import {
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
 } from "@boloes/lottery-contracts";
-import { forEachCombination } from "@boloes/combinatorics";
+import { createCombinationRanker, forEachCombination } from "@boloes/combinatorics";
 import {
   CONTRACT_VERSION,
   HASH_ALGORITHM,
@@ -48,6 +50,7 @@ export const LOTOFACIL_METRIC_ENGINE_VERSION = "1.0.0";
 export const LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION = "1.0.0";
+export const LOTOFACIL_EXACT_COVERAGE_ADAPTER_VERSION = "lotofacil-exact-coverage/1.0.0";
 export const LOTOFACIL_CANONICAL_FORMULA_VERSION = "1.0.0";
 export const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
 const LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE = 3_268_760;
@@ -967,6 +970,77 @@ export const lotofacilPortfolioStructuralDistributionAdapter: PortfolioStructura
     const profile = lotofacilMetricEngine.calculate(numbers);
     const classification = lotofacilStructuralClassifier.classify(profile);
     return summarizeLotofacilStructuralProfile(profile, classification);
+  },
+};
+
+const rankLotofacilOutcome = createCombinationRanker(
+  LOTOFACIL_DEFINITION.totalNumbers,
+  LOTOFACIL_DEFINITION.drawSize,
+);
+
+function mergeCoveredOutcome(
+  candidateNumbers: readonly number[],
+  complementNumbers: readonly number[],
+  candidateIndexes: readonly number[],
+  complementIndexes: readonly number[],
+  outcome: number[],
+): void {
+  let candidatePosition = 0;
+  let complementPosition = 0;
+  for (let outcomePosition = 0; outcomePosition < outcome.length; outcomePosition += 1) {
+    const candidateValue = candidatePosition < candidateIndexes.length
+      ? candidateNumbers[candidateIndexes[candidatePosition]!]!
+      : Number.POSITIVE_INFINITY;
+    const complementValue = complementPosition < complementIndexes.length
+      ? complementNumbers[complementIndexes[complementPosition]!]!
+      : Number.POSITIVE_INFINITY;
+    if (candidateValue < complementValue) {
+      outcome[outcomePosition] = candidateValue;
+      candidatePosition += 1;
+    } else {
+      outcome[outcomePosition] = complementValue;
+      complementPosition += 1;
+    }
+  }
+}
+
+/** Lotofácil-only bridge for exact coverage of simple 15-number bets. */
+export const lotofacilExactCoverageAdapter: ExactCoverageAdapter = {
+  lotteryId: LOTOFACIL_ID,
+  adapterVersion: LOTOFACIL_EXACT_COVERAGE_ADAPTER_VERSION,
+  betSize: LOTOFACIL_DEFINITION.drawSize,
+  universeSize: LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE,
+  coveredOutcomeVisitsPerCandidate:
+    EXACT_COVERAGE_TIERS[EXACT_COVERAGE_TIERS.length - 1]!.grossCoveredOutcomesPerCandidate,
+  tiers: EXACT_COVERAGE_TIERS,
+  supportsDefinition: isLotofacilDefinition,
+  enumerateCoveredOutcomeRanks(
+    numbers: readonly number[],
+    visitor: (rank: number, hits: number) => void,
+  ): void {
+    const candidateNumbers = numbers.map((number) => number - 1);
+    const selected = new Uint8Array(LOTOFACIL_DEFINITION.totalNumbers);
+    for (const number of candidateNumbers) selected[number] = 1;
+    const complementNumbers: number[] = [];
+    for (let number = 0; number < selected.length; number += 1) {
+      if (selected[number] === 0) complementNumbers.push(number);
+    }
+    const outcome = Array.from({ length: LOTOFACIL_DEFINITION.drawSize }, () => 0);
+
+    for (let hits = EXACT_COVERAGE_TIERS.at(-1)!.minimumHits; hits <= LOTOFACIL_DEFINITION.drawSize; hits += 1) {
+      forEachCombination(candidateNumbers.length, hits, (candidateIndexes) => {
+        forEachCombination(complementNumbers.length, LOTOFACIL_DEFINITION.drawSize - hits, (complementIndexes) => {
+          mergeCoveredOutcome(
+            candidateNumbers,
+            complementNumbers,
+            candidateIndexes,
+            complementIndexes,
+            outcome,
+          );
+          visitor(rankLotofacilOutcome(outcome), hits);
+        });
+      });
+    }
   },
 };
 

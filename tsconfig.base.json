@@ -21,6 +21,7 @@
       "@boloes/statistics-engine": ["packages/statistics-engine/src/index.ts"],
       "@boloes/combinatorics": ["packages/combinatorics/src/index.ts"],
       "@boloes/audit-engine": ["packages/audit-engine/src/index.ts"],
+      "@boloes/coverage-engine": ["packages/coverage-engine/src/index.ts"],
       "@boloes/lottery-lotofacil": ["packages/lotteries/lotofacil/src/index.ts"]
     }
   }
