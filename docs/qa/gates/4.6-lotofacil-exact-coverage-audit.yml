@@ -4,8 +4,8 @@ story_title: 'Auditoria exata de cobertura Lotofácil 12+'
 gate: PASS
 status_reason: 'Os AC 1–10 estão cobertos; cálculo exato, contrato Lotofácil, motor reutilizável, limites, observabilidade e regressões foram verificados sem achados remanescentes.'
 reviewer: 'Quinn (Test Architect)'
-reviewed_revision: 'commit:a935bd0eeda752213fde9a8a91ba13d302299008'
-updated: '2026-09-02T20:25:44Z'
+reviewed_revision: 'commit:61a94ba545f2ae029310084a96007a25fa71dcf7'
+updated: '2026-09-02T20:31:20Z'
 top_issues: []
 waiver:
   active: false
@@ -16,7 +16,7 @@ evidence:
   test_files_passed: 21
   checks: ['npm run lint', 'npm run typecheck', 'npm test', 'git diff --check']
   coderabbit_final_findings: 0
-  post_commit_fix: 'Contrato público passou a fixar lotofacil@1.0.0, universo 3.268.760 e betSize 15.'
+  post_commit_fix: 'Contrato público fixa lotofacil@1.0.0, universo/betSize, progresso coerente e coeficientes binomiais exatos no intervalo seguro.'
   post_commit_checks: ['npm run lint', 'npm run typecheck', 'npm test', 'coderabbit local']
   trace:
     ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
