@@ -19,6 +19,7 @@
 | 2026-09-02 | 0.4.6 | Primeira distribuição estrutural de carteira restrita à Lotofácil simples, com agregação exata, progresso e cancelamento | Produto / Arquitetura |
 | 2026-09-02 | 0.4.7 | Gate da cobertura única: método exato 12+, teto de 1.000 jogos simples, timeout de 30 s e erro zero | Produto / Arquitetura |
 | 2026-09-02 | 0.4.8 | Primeira expansão canônica Lotofácil restrita a uma aposta de 15–20, materializada em combinações simples de 15 | Produto / Arquitetura |
+| 2026-09-02 | 0.4.9 | Composição transitória de várias apostas-fonte Lotofácil com expansão canônica e cobertura exata, preservando o teto de 1.000 ocorrências simples | Produto / Arquitetura |
 
 ## 1. Objetivo e contexto
 
@@ -194,6 +195,18 @@ transitório e não agrega carteira, calcula cobertura, consulta preço/cotas,
 persiste ou congela estado. Outras modalidades e integração da expansão com a
 auditoria de cobertura permanecem fora desta primeira entrega.
 
+Na primeira composição entre expansão e cobertura, a ação recebe uma ou mais
+apostas-fonte canônicas da Lotofácil, preserva a ordem das fontes e a ordem
+lexicográfica de cada expansão e encaminha todas as ocorrências simples ao
+contrato exato de cobertura existente. Antes de materializar ou emitir
+progresso, a operação soma `C(k,15)` de todas as fontes e rejeita a solicitação
+quando o total excede 1.000; por isso, apostas de 19–20 dezenas não são elegíveis
+enquanto o teto da cobertura permanecer inalterado. Combinações simples iguais
+originadas por fontes distintas continuam como ocorrências independentes na
+cobertura bruta e são expostas como duplicidade/redundância, sem deduplicação
+silenciosa. A composição é transitória e não altera os contratos `1.0` de
+expansão ou cobertura, nem persiste, congela, calcula custo/cotas ou cria UI.
+
 ### FR-06 - Bolão mínimo
 
 O usuário informa modalidade, concurso, tamanho de aposta e número inteiro de
@@ -254,6 +267,12 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   3.268.760 resultados. O motor deve ceder o event loop e verificar progresso,
   timeout e cancelamento em lotes limitados; falha antes de publicar qualquer
   resultado quando o prazo é excedido.
+  A primeira composição de expansão com cobertura preserva esse mesmo teto e
+  timeout: a soma das ocorrências simples derivadas de todas as apostas-fonte
+  deve ficar entre 1 e 1.000 e é validada integralmente antes da materialização
+  e do primeiro progresso. O benchmark local de uma fonte de 18 dezenas, com
+  816 ocorrências simples, concluiu expansão e cobertura em aproximadamente
+  3,13 segundos no ambiente de referência.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
   por template.
 - **NFR-06 - Licença:** derivados do INJOLOCA obedecem GPL-3.0-or-later.
@@ -452,6 +471,12 @@ número de índices cujo maior acerto alcança o limiar; cobertura repetida é
 Expansão para combinações de 15: 15=1; 16=16; 17=136; 18=816; 19=3.876;
 20=15.504. A unidade interna é a combinação simples de 15, mesmo para apostas
 maiores.
+
+Ao compor várias apostas-fonte com a cobertura exata, o total operacional é
+`SUM(C(k_i,15))`. A ordem determinística é a ordem das fontes seguida da ordem
+lexicográfica dentro de cada fonte. Ocorrências simples iguais entre fontes não
+são eliminadas: contam novamente na cobertura bruta, não ampliam a cobertura
+única e tornam a redundância observável.
 
 ### 7.5 Estratégias
 

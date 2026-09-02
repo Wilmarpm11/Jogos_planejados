@@ -1,17 +1,29 @@
 import { validatePortfolioAuditCandidates } from "@boloes/audit-engine";
 import {
+  CANONICAL_BET_EXPANSION_ALGORITHM_VERSION,
+  CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
   EXACT_COVERAGE_AUDIT_ALGORITHM_VERSION,
   EXACT_COVERAGE_AUDIT_CONTRACT_VERSION,
   EXACT_COVERAGE_AUDIT_MAX_WORK_BATCH_SIZE,
   EXACT_COVERAGE_AUDIT_METHOD,
   EXACT_COVERAGE_AUDIT_TIMEOUT_MS,
+  EXPANDED_COVERAGE_COMPOSITION_ALGORITHM_VERSION,
+  EXPANDED_COVERAGE_COMPOSITION_CONTRACT_VERSION,
+  canonicalBetExpansionRequestSchema,
   exactCoverageAuditProgressSchema,
   exactCoverageAuditRequestSchema,
   exactCoverageAuditResultBaseSchema,
+  expandedCoverageCompositionRequestSchema,
+  validateCanonicalBetExpansionResult,
+  validateExpandedCoverageCompositionBaseResult,
+  type CanonicalBetExpansionAdapter,
   type ExactCoverageAdapter,
   type ExactCoverageAuditErrorCode,
   type ExactCoverageAuditProgress,
   type ExactCoverageAuditBaseResult,
+  type ExpandedCoverageCompositionBaseResult,
+  type ExpandedCoverageCompositionRequest,
+  type LotteryDefinition,
 } from "@boloes/lottery-contracts";
 
 function yieldToEventLoop(): Promise<void> {
@@ -61,6 +73,18 @@ export interface ExactCoverageAuditOptions {
   readonly onProgress?: (progress: ExactCoverageAuditProgress) => void;
   /** Monotonic clock seam used by deterministic timeout tests. */
   readonly now?: () => number;
+}
+
+interface ExpandedSourceSummary {
+  sourceIndex: number;
+  sourceBet: { numbers: number[] };
+  sourceBetSize: number;
+  expectedCandidateCount: number;
+}
+
+interface ExpandedSources {
+  sources: ExpandedSourceSummary[];
+  candidates: Array<{ numbers: number[] }>;
 }
 
 function assertAdapterContract(adapter: ExactCoverageAdapter): void {
@@ -205,4 +229,135 @@ export async function auditExactPortfolioCoverage(
   });
   emitProgress("COUNT_UNIQUE_OUTCOMES");
   return result;
+}
+
+function assertCompositionAdapters(
+  lotteryDefinition: LotteryDefinition,
+  expansionAdapter: CanonicalBetExpansionAdapter,
+  coverageAdapter: ExactCoverageAdapter,
+): void {
+  if (
+    expansionAdapter.lotteryId !== lotteryDefinition.id ||
+    !expansionAdapter.supportsDefinition(lotteryDefinition)
+  ) {
+    throw new Error(
+      `No canonical expansion adapter supports lottery definition ${lotteryDefinition.id}@${lotteryDefinition.version}.`,
+    );
+  }
+  if (expansionAdapter.adapterVersion.trim().length === 0) {
+    throw new Error("The canonical expansion adapter must declare a version.");
+  }
+  if (
+    coverageAdapter.lotteryId !== lotteryDefinition.id ||
+    !coverageAdapter.supportsDefinition(lotteryDefinition)
+  ) {
+    throw new Error(
+      `No exact coverage adapter supports lottery definition ${lotteryDefinition.id}@${lotteryDefinition.version}.`,
+    );
+  }
+  if (coverageAdapter.betSize !== lotteryDefinition.drawSize) {
+    throw new Error(
+      `The ${coverageAdapter.lotteryId} exact coverage adapter supports only ${coverageAdapter.betSize}-number bets.`,
+    );
+  }
+  assertAdapterContract(coverageAdapter);
+}
+
+function throwIfCompositionCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new ExactCoverageAuditCancelledError();
+}
+
+function materializeExpandedSources(
+  request: ExpandedCoverageCompositionRequest,
+  expansionAdapter: CanonicalBetExpansionAdapter,
+  signal?: AbortSignal,
+): ExpandedSources {
+  const sources: ExpandedSourceSummary[] = [];
+  const candidates: Array<{ numbers: number[] }> = [];
+
+  request.sourceBets.forEach((sourceBet, sourceIndex) => {
+    throwIfCompositionCancelled(signal);
+    const expansionRequest = canonicalBetExpansionRequestSchema.parse({
+      contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+      lotteryDefinition: request.lotteryDefinition,
+      sourceBet,
+    });
+    const expansion = validateCanonicalBetExpansionResult(
+      expansionRequest,
+      expansionAdapter.expand(expansionRequest),
+    );
+    sources.push({
+      sourceIndex,
+      sourceBet: { numbers: [...sourceBet.numbers] },
+      sourceBetSize: sourceBet.numbers.length,
+      expectedCandidateCount: expansion.expectedCandidateCount,
+    });
+    for (const candidate of expansion.candidates) {
+      candidates.push({ numbers: [...candidate.numbers] });
+    }
+  });
+
+  return { sources, candidates };
+}
+
+/**
+ * Composes canonical expansion and exact coverage while preserving every
+ * expanded occurrence. All boundaries are checked before materialization.
+ */
+export async function auditExpandedPortfolioCoverage(
+  input: unknown,
+  expansionAdapter: CanonicalBetExpansionAdapter,
+  coverageAdapter: ExactCoverageAdapter,
+  options: ExactCoverageAuditOptions = {},
+): Promise<ExpandedCoverageCompositionBaseResult> {
+  const request = expandedCoverageCompositionRequestSchema.parse(input);
+  const { lotteryDefinition, sourceBets } = request;
+  assertCompositionAdapters(lotteryDefinition, expansionAdapter, coverageAdapter);
+  throwIfCompositionCancelled(options.signal);
+  const { sources, candidates } = materializeExpandedSources(
+    request,
+    expansionAdapter,
+    options.signal,
+  );
+
+  throwIfCompositionCancelled(options.signal);
+  const distinctCandidateCount = new Set(
+    candidates.map((candidate) => candidate.numbers.join(",")),
+  ).size;
+  const coverage = await auditExactPortfolioCoverage(
+    {
+      contractVersion: EXACT_COVERAGE_AUDIT_CONTRACT_VERSION,
+      lotteryDefinition,
+      candidates,
+    },
+    coverageAdapter,
+    options,
+  );
+
+  return validateExpandedCoverageCompositionBaseResult(request, {
+    contractVersion: EXPANDED_COVERAGE_COMPOSITION_CONTRACT_VERSION,
+    algorithmVersion: EXPANDED_COVERAGE_COMPOSITION_ALGORITHM_VERSION,
+    componentVersions: {
+      expansionContractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+      expansionAlgorithmVersion: CANONICAL_BET_EXPANSION_ALGORITHM_VERSION,
+      expansionAdapterVersion: expansionAdapter.adapterVersion,
+      coverageContractVersion: EXACT_COVERAGE_AUDIT_CONTRACT_VERSION,
+      coverageAlgorithmVersion: EXACT_COVERAGE_AUDIT_ALGORITHM_VERSION,
+      coverageAdapterVersion: coverageAdapter.adapterVersion,
+    },
+    lottery: {
+      id: lotteryDefinition.id,
+      definitionVersion: lotteryDefinition.version,
+    },
+    sourceBetCount: sourceBets.length,
+    sources,
+    expandedCandidateCount: candidates.length,
+    distinctCandidateCount,
+    duplicateCandidateOccurrences: candidates.length - distinctCandidateCount,
+    coverage,
+    transient: true,
+    persisted: false,
+    frozen: false,
+    portfolioStateChanged: false,
+  });
 }

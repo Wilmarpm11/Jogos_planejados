@@ -1,0 +1,54 @@
+schema: 1
+story: '4.8'
+story_title: 'Composição da expansão canônica com a cobertura exata Lotofácil'
+gate: PASS
+status_reason: 'Os AC 1–10 estão cobertos; preflight, ordem, duplicidade, contratos, operação CLI e compatibilidade 4.6/4.7 foram verificados sem achados remanescentes.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree:sha256:e0f7f4a81e96bc35657c070e6c2163536976abb20339080db301715a15162f73'
+updated: '2026-09-02T23:10:51Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-16T23:10:51Z'
+evidence:
+  tests_reviewed: 8
+  regression_tests_passed: 173
+  test_files_passed: 23
+  checks: ['npm run lint', 'npm run typecheck', 'npm test', 'npm ls --all', 'git diff --check']
+  maximum_eligible_case:
+    source_bet_size: 18
+    expanded_candidates: 816
+    timeout_ms: 30000
+  cumulative_limit:
+    accepted: 1000
+    rejected: 1001
+  coderabbit_final_findings: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ac_gaps: []
+risk_summary:
+  totals:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 0
+  highest_score: 0
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Schemas estritos e arquivo local; nenhuma rede, banco, credencial, persistência ou execução dinâmica participa da composição.'
+  performance:
+    status: PASS
+    notes: 'O preflight limita a 1.000 ocorrências e a fonte máxima elegível de 18 dezenas/816 candidatos conclui dentro do timeout de 30 segundos.'
+  reliability:
+    status: PASS
+    notes: 'Contagem cumulativa antes dos adapters, envelopes vinculados, preservação de ocorrências, cancelamento, timeout e streams sem resultado parcial foram verificados.'
+  maintainability:
+    status: PASS
+    notes: 'Motor genérico por injeção, contratos base/público separados e adaptadores versionados mantêm responsabilidades explícitas e sem ciclo.'
+recommendations:
+  immediate: []
+  future:
+    - action: 'Exigir nova story, limite versionado e benchmark antes de aceitar mais de 1.000 ocorrências ou fontes de 19–20 nesta composição.'
+      refs: ['docs/architecture/lotofacil-expanded-coverage-composition-contract.md', 'docs/stories/4.8.lotofacil-expanded-coverage-composition.story.md']

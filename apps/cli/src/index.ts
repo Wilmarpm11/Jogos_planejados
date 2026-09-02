@@ -22,6 +22,8 @@ import {
   basicPortfolioAuditRequestSchema,
   exactCoverageAuditRequestSchema,
   exactCoverageAuditResultSchema,
+  expandedCoverageCompositionRequestSchema,
+  expandedCoverageCompositionResultSchema,
   pairwisePortfolioAuditRequestSchema,
   portfolioStructuralDistributionAuditRequestSchema,
   portfolioGenerationRequestSchema,
@@ -35,6 +37,7 @@ import {
   PortfolioStructuralDistributionAuditCancelledError,
 } from "@boloes/audit-engine";
 import {
+  auditExpandedPortfolioCoverage,
   auditExactPortfolioCoverage,
 } from "@boloes/coverage-engine";
 import {
@@ -61,6 +64,7 @@ import {
   calculateLotofacilStructuralMass,
   classifyLotofacilStructuralProfile,
   generateLotofacilPortfolio,
+  lotofacilCanonicalBetExpansionAdapter,
   lotofacilPortfolioStructuralDistributionAdapter,
   lotofacilExactCoverageAdapter,
   LOTOFACIL_DEFINITION,
@@ -127,6 +131,8 @@ Comandos:
                        Audita a distribuição estrutural Lotofácil com progresso e cancelamento locais.
   portfolio audit-coverage --input PATH
                        Audita cobertura exata Lotofácil 12+ com progresso, timeout e cancelamento locais.
+  portfolio audit-expanded-coverage --input PATH
+                       Expande apostas-fonte Lotofácil e audita até 1.000 ocorrências simples.
   lotofacil expand --numbers 01,02,...
                        Expande uma aposta de 15–20 dezenas em combinações simples de 15.
   lotofacil occupancy --numbers 01,02,...
@@ -582,6 +588,36 @@ if (command === "help" || command === "--help" || command === "-h") {
           signal: cancellation.signal,
           onProgress: (progress) => process.stderr.write(JSON.stringify(progress) + "\n"),
         }),
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch (error) {
+      process.stderr.write(JSON.stringify(exactCoverageAuditErrorRecord(error)) + "\n");
+      process.exitCode = exactCoverageAuditExitCode(error);
+    } finally {
+      process.off("SIGINT", cancelOnSigint);
+    }
+  }
+} else if (command === "portfolio" && process.argv[3] === "audit-expanded-coverage") {
+  const inputPath = argumentValue("--input");
+  if (!inputPath) { process.stderr.write("Informe --input com as apostas-fonte para auditoria.\n"); process.exitCode = 1; }
+  else {
+    const cancellation = new AbortController();
+    const cancelOnSigint = (): void => cancellation.abort();
+    process.once("SIGINT", cancelOnSigint);
+    try {
+      const request = expandedCoverageCompositionRequestSchema.parse(
+        JSON.parse(readFileSync(resolve(inputPath), "utf8")),
+      );
+      const result = expandedCoverageCompositionResultSchema.parse(
+        await auditExpandedPortfolioCoverage(
+          request,
+          lotofacilCanonicalBetExpansionAdapter,
+          lotofacilExactCoverageAdapter,
+          {
+            signal: cancellation.signal,
+            onProgress: (progress) => process.stderr.write(JSON.stringify(progress) + "\n"),
+          },
+        ),
       );
       process.stdout.write(JSON.stringify(result) + "\n");
     } catch (error) {
