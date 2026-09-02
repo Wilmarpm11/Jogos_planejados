@@ -63,16 +63,28 @@ as combinações simples de 15 sem integrar cobertura ou persistência.
 - **Razão:** atende CLI First sem introduzir arquivo, banco ou UI.
 - **Alternativas:** request por arquivo; comando dentro de `portfolio`.
 
+### 6. Aplicar o teto também no schema de resultado isolado
+
+- **Tipo:** confiabilidade
+- **Prioridade:** média
+- **Decisão:** limitar `candidates` a 15.504 no próprio
+  `canonicalBetExpansionResultSchema`, além do preflight e do envelope de
+  execução.
+- **Razão:** garante que consumidores que validem diretamente um resultado não
+  aceitem uma materialização acima do limite público do contrato.
+- **Alternativas:** depender exclusivamente do request ou do execution schema.
+
 ## Verification
 
 - `npm run lint` — PASS
 - `npm run typecheck` — PASS
-- `npm test` — 22 arquivos, 164 testes PASS
-- teste direcionado — 20 testes PASS
+- `npm test` — 22 arquivos, 165 testes PASS
+- teste direcionado — 21 testes PASS
 - `npm ls @boloes/combinatorics --all` — dependência workspace deduplicada
 - `git diff --check` — PASS
 - CodeRabbit local — primeira rodada: 1 major corrigido e 1 minor de cache
-  descartado; segunda rodada: 2 majors corrigidos; re-review final: 0 achados
+  descartado; segunda rodada: 2 majors corrigidos; re-review DEV/QA: 0 achados;
+  Pre-PR: limite direto do result schema corrigido
 
 ## Consequences
 

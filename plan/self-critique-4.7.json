@@ -1,6 +1,6 @@
 {
   "subtaskId": "4.7",
-  "critiquedAt": "2026-09-02T21:20:48Z",
+  "critiquedAt": "2026-09-02T21:39:32Z",
   "step5_5": {
     "predictedBugs": [
       "A enumeração poderia reter o buffer reutilizado por forEachCombination; cada visita projeta e cria um novo array de dezenas antes de armazenar.",
@@ -29,9 +29,10 @@
     "issuesFound": [
       "Import de tipo não utilizado removido apó lint.",
       "Contagem esperada passou a ser derivada pelo contrato para rejeitar expansão truncada com contagem falsificada.",
-      "Envelope request+result e teto absoluto foram adicionados apó revisão CodeRabbit."
+      "Envelope request+result e teto absoluto foram adicionados apó revisão CodeRabbit.",
+      "O array de candidatos do result schema passou a aplicar diretamente o teto absoluto após o Pre-PR."
     ],
-    "issuesFixed": 3,
+    "issuesFixed": 4,
     "testsRerun": true,
     "passed": true
   },

@@ -381,7 +381,9 @@ export const canonicalBetExpansionResultSchema = z.object({
   sourceBetSize: z.number().int().positive(),
   simpleBetSize: z.number().int().positive(),
   expectedCandidateCount: z.number().int().positive(),
-  candidates: z.array(canonicalBetExpansionBetSchema).min(1),
+  candidates: z.array(canonicalBetExpansionBetSchema)
+    .min(1)
+    .max(CANONICAL_BET_EXPANSION_MAX_CANDIDATES),
   transient: z.literal(true),
   persisted: z.literal(false),
   frozen: z.literal(false),

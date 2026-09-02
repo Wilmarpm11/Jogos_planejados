@@ -187,6 +187,27 @@ describe("Lotofácil canonical bet expansion", () => {
     expect(CANONICAL_BET_EXPANSION_MAX_CANDIDATES).toBe(15_504);
   });
 
+  it("rejects oversized candidate arrays through direct result-schema parsing", () => {
+    const numbers = sourceNumbers(CANONICAL_BET_EXPANSION_MAX_CANDIDATES + 1);
+    const candidates = numbers.map((number) => ({ numbers: [number] }));
+
+    expect(canonicalBetExpansionResultSchema.safeParse({
+      contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+      algorithmVersion: CANONICAL_BET_EXPANSION_ALGORITHM_VERSION,
+      lottery: { id: "generic", definitionVersion: "1.0.0" },
+      sourceBet: { numbers },
+      sourceBetSize: numbers.length,
+      simpleBetSize: 1,
+      expectedCandidateCount: candidates.length,
+      candidates,
+      transient: true,
+      persisted: false,
+      frozen: false,
+      coverageCalculated: false,
+      portfolioStateChanged: false,
+    }).success).toBe(false);
+  });
+
   it.each([
     { label: "other lottery", value: { ...request(15), lotteryDefinition: { ...LOTOFACIL_DEFINITION, id: "other" } } },
     { label: "other definition version", value: { ...request(15), lotteryDefinition: { ...LOTOFACIL_DEFINITION, version: "2.0.0" } } },
