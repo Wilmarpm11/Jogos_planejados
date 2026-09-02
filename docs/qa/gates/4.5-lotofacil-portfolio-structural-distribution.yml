@@ -4,8 +4,8 @@ story_title: 'Auditoria da distribuição estrutural da carteira Lotofácil'
 gate: PASS
 status_reason: 'Os AC 1–8 estão cobertos; adapter, definição canônica, buckets, frações, progresso e cancelamento foram verificados sem regressão das auditorias 4.3/4.4.'
 reviewer: 'Quinn (Test Architect)'
-reviewed_revision: 'commit:d8c2ec4ddd15c9f0ea7fbf6e2e55d030b9641a5a'
-updated: '2026-09-02T14:27:11Z'
+reviewed_revision: 'commit:ec2415de4ac3f109cdf75621f9803e8cba9adf07'
+updated: '2026-09-02T19:40:37Z'
 top_issues: []
 waiver:
   active: false
@@ -15,6 +15,8 @@ evidence:
   regression_tests_passed: 130
   test_files_passed: 20
   post_commit_checks: ['npm run lint', 'npm run typecheck', 'npm test']
+  post_merge_revision_verified: true
+  post_merge_checks: ['npm run lint', 'npm run typecheck', 'npm test']
   coderabbit_precommit_findings_fixed: 2
   coderabbit_committed_findings: 0
   trace:
