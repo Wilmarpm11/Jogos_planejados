@@ -1,0 +1,28 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T14:00:52Z"
+  from_agent: "po"
+  to_agent: "dev"
+  last_command: "*validate-story-draft"
+  story_context:
+    story_id: "4.5"
+    story_path: "docs/stories/4.5.lotofacil-portfolio-structural-distribution.story.md"
+    story_status: "Ready"
+    priority: "P0"
+    branch: "feature/4.5-lotofacil-portfolio-structural-distribution"
+  decisions:
+    - "Reutilizar contratos estruturais, validação canônica e audit-engine; não criar skill nem package."
+    - "Manter agregação genérica no Core e restringir E1–E10 ao adaptador Lotofácil."
+    - "Primeira entrega aceita somente Lotofácil simples de 15 dezenas."
+    - "A operação linear não herda o teto de 1.000, mas exige lotes, progresso e cancelamento."
+    - "Comparação, otimização, cobertura, persistência, congelamento e UI estão fora do escopo."
+  files_modified:
+    - "docs/prd.md"
+    - "docs/architecture/basic-portfolio-audit-contract.md"
+    - "docs/stories/4.5.lotofacil-portfolio-structural-distribution.story.md"
+    - ".ai/story-validation-4.5.json"
+    - ".aiox/handoffs/2026-09-02-story-4.4-closure.yaml"
+    - ".aiox/handoffs/2026-09-02-story-4.5-ready.yaml"
+  blockers: []
+  next_action: "Usar @dev *develop 4.5; implementar somente após consumir este handoff."

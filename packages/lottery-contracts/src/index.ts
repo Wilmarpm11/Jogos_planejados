@@ -580,18 +580,112 @@ export interface StructuralClassifier<Profile, Classification> {
   classify(profile: Profile): Classification;
 }
 
-export type StructuralBand =
-  | "ZERO_EXTREMES"
-  | "ONE_EXTREME"
-  | "TWO_EXTREMES"
-  | "THREE_EXTREMES"
-  | "FOUR_PLUS_EXTREMES";
+export const STRUCTURAL_BAND_ORDER = [
+  "ZERO_EXTREMES",
+  "ONE_EXTREME",
+  "TWO_EXTREMES",
+  "THREE_EXTREMES",
+  "FOUR_PLUS_EXTREMES",
+] as const;
+
+export const structuralBandSchema = z.enum(STRUCTURAL_BAND_ORDER);
+export type StructuralBand = z.infer<typeof structuralBandSchema>;
 
 export interface StructuralSummary {
   readonly applicable: boolean;
   readonly extremeCount: number | null;
   readonly band: StructuralBand | null;
   readonly isCentralCore: boolean | null;
+}
+
+export const PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CONTRACT_VERSION = "1.0" as const;
+export const PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_ALGORITHM_VERSION =
+  "structural-distribution/1.0.0" as const;
+
+/** Linear, history-free input for aggregating canonical structural summaries. */
+export const portfolioStructuralDistributionAuditRequestSchema = z.object({
+  contractVersion: z.literal(PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CONTRACT_VERSION),
+  lotteryDefinition: lotteryDefinitionSchema,
+  candidates: z.array(basicPortfolioAuditCandidateSchema).min(1),
+}).strict();
+export type PortfolioStructuralDistributionAuditRequest = z.infer<
+  typeof portfolioStructuralDistributionAuditRequestSchema
+>;
+
+export const portfolioStructuralDistributionAuditProgressSchema = z.object({
+  phase: z.literal("STRUCTURAL_DISTRIBUTION"),
+  processedCandidates: z.number().int().nonnegative(),
+  totalCandidates: z.number().int().positive(),
+  percent: z.number().int().min(0).max(100),
+}).strict();
+export type PortfolioStructuralDistributionAuditProgress = z.infer<
+  typeof portfolioStructuralDistributionAuditProgressSchema
+>;
+
+const portfolioStructuralDistributionBucketSchema = z.object({
+  band: structuralBandSchema,
+  count: z.number().int().nonnegative(),
+  frequency: exactFractionSchema.strict(),
+}).strict();
+
+function contractGreatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a;
+}
+
+export const portfolioStructuralDistributionAuditResultSchema = z.object({
+  contractVersion: z.literal(PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CONTRACT_VERSION),
+  algorithmVersion: z.literal(PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_ALGORITHM_VERSION),
+  metricEngineVersion: z.string().min(1),
+  classifierVersion: z.string().min(1),
+  lottery: z.object({ id: z.string().min(1), definitionVersion: z.string().min(1) }).strict(),
+  betSize: z.number().int().positive(),
+  candidateCount: z.number().int().positive(),
+  buckets: z.array(portfolioStructuralDistributionBucketSchema).length(STRUCTURAL_BAND_ORDER.length),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict().superRefine((result, context) => {
+  const totalCount = result.buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+  if (totalCount !== result.candidateCount) {
+    context.addIssue({ code: "custom", path: ["buckets"], message: "Bucket counts must equal candidateCount." });
+  }
+
+  result.buckets.forEach((bucket, index) => {
+    if (bucket.band !== STRUCTURAL_BAND_ORDER[index]) {
+      context.addIssue({ code: "custom", path: ["buckets", index, "band"], message: "Buckets must use canonical structural-band order." });
+    }
+    const divisor = contractGreatestCommonDivisor(bucket.count, result.candidateCount);
+    const expectedNumerator = bucket.count / divisor;
+    const expectedDenominator = result.candidateCount / divisor;
+    if (
+      bucket.frequency.numerator !== expectedNumerator ||
+      bucket.frequency.denominator !== expectedDenominator
+    ) {
+      context.addIssue({ code: "custom", path: ["buckets", index, "frequency"], message: "Bucket frequency must be the reduced exact count over candidateCount." });
+    }
+  });
+});
+export type PortfolioStructuralDistributionAuditResult = z.infer<
+  typeof portfolioStructuralDistributionAuditResultSchema
+>;
+
+/** Lottery-owned bridge; the generic audit engine never owns rule semantics. */
+export interface PortfolioStructuralDistributionAdapter {
+  readonly lotteryId: string;
+  readonly betSize: number;
+  readonly metricEngineVersion: string;
+  readonly classifierVersion: string;
+  supportsDefinition(definition: LotteryDefinition): boolean;
+  summarize(numbers: readonly number[]): StructuralSummary;
 }
 
 /** A single structural band in a completely enumerated lottery universe. */

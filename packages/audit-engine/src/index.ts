@@ -4,15 +4,26 @@ import {
   pairwisePortfolioAuditProgressSchema,
   pairwisePortfolioAuditRequestSchema,
   pairwisePortfolioAuditResultSchema,
+  portfolioStructuralDistributionAuditProgressSchema,
+  portfolioStructuralDistributionAuditRequestSchema,
+  portfolioStructuralDistributionAuditResultSchema,
   PAIRWISE_PORTFOLIO_AUDIT_ALGORITHM_VERSION,
   PAIRWISE_PORTFOLIO_AUDIT_CONTRACT_VERSION,
+  PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_ALGORITHM_VERSION,
+  PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CONTRACT_VERSION,
+  STRUCTURAL_BAND_ORDER,
   type BasicPortfolioAuditResult,
   type PairwisePortfolioAuditProgress,
   type PairwisePortfolioAuditResult,
   type PairwisePortfolioIntersection,
+  type PortfolioStructuralDistributionAdapter,
+  type PortfolioStructuralDistributionAuditProgress,
+  type PortfolioStructuralDistributionAuditResult,
+  type StructuralBand,
 } from "@boloes/lottery-contracts";
 
 const PAIRWISE_AUDIT_BATCH_SIZE = 2_048;
+const STRUCTURAL_DISTRIBUTION_AUDIT_BATCH_SIZE = 256;
 
 function pairKey(first: number, second: number): string {
   return `${first}:${second}`;
@@ -61,11 +72,14 @@ function validateCandidate(
   }
 }
 
-function validateCandidates(
+export function validatePortfolioAuditCandidates(
   definition: { totalNumbers: number; drawSize: number; minBetSize: number; maxBetSize: number },
   candidates: readonly { readonly numbers: readonly number[] }[],
 ): number {
   validateDefinition(definition);
+  if (candidates.length === 0) {
+    throw new Error("Portfolio audit requires at least one candidate.");
+  }
   const betSize = candidates[0]!.numbers.length;
   if (betSize < definition.minBetSize || betSize > definition.maxBetSize) {
     throw new Error(`Candidate bet size ${betSize} is outside ${definition.minBetSize}-${definition.maxBetSize}.`);
@@ -125,7 +139,7 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
 export function auditBasicPortfolio(input: unknown): BasicPortfolioAuditResult {
   const request = basicPortfolioAuditRequestSchema.parse(input);
   const { lotteryDefinition, candidates } = request;
-  const betSize = validateCandidates(lotteryDefinition, candidates);
+  const betSize = validatePortfolioAuditCandidates(lotteryDefinition, candidates);
 
   const numberCounts = Array.from({ length: lotteryDefinition.totalNumbers + 1 }, () => 0);
   const pairCounts = new Map<string, number>();
@@ -197,7 +211,7 @@ export async function auditPortfolioIntersections(
 ): Promise<PairwisePortfolioAuditResult> {
   const request = pairwisePortfolioAuditRequestSchema.parse(input);
   const { lotteryDefinition, candidates } = request;
-  const betSize = validateCandidates(lotteryDefinition, candidates);
+  const betSize = validatePortfolioAuditCandidates(lotteryDefinition, candidates);
   throwIfCancelled(options.signal);
 
   const totalPairs = (candidates.length * (candidates.length - 1)) / 2;
@@ -244,6 +258,123 @@ export async function auditPortfolioIntersections(
     intersections,
     overlapHistogram: histogramCounts.map((pairCount, size) => ({ intersectionSize: size, pairCount })),
     totals: { expectedPairs: totalPairs, processedPairs },
+    transient: true,
+    persisted: false,
+    frozen: false,
+    coverageCalculated: false,
+    portfolioStateChanged: false,
+  });
+}
+
+export class PortfolioStructuralDistributionAuditCancelledError extends Error {
+  readonly code = "PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CANCELLED";
+
+  constructor() {
+    super("Portfolio structural distribution audit cancelled.");
+    this.name = "AbortError";
+  }
+}
+
+export interface PortfolioStructuralDistributionAuditOptions {
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: PortfolioStructuralDistributionAuditProgress) => void;
+}
+
+function throwIfStructuralDistributionCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new PortfolioStructuralDistributionAuditCancelledError();
+}
+
+function reducedFrequency(count: number, candidateCount: number): { numerator: number; denominator: number } {
+  let left = count;
+  let right = candidateCount;
+  while (right !== 0) {
+    const remainder = left % right;
+    left = right;
+    right = remainder;
+  }
+  return { numerator: count / left, denominator: candidateCount / left };
+}
+
+/**
+ * Aggregates lottery-owned structural summaries in fixed space. Candidate
+ * validation remains generic and no lottery classification rule enters Core.
+ */
+export async function auditPortfolioStructuralDistribution(
+  input: unknown,
+  adapter: PortfolioStructuralDistributionAdapter,
+  options: PortfolioStructuralDistributionAuditOptions = {},
+): Promise<PortfolioStructuralDistributionAuditResult> {
+  const request = portfolioStructuralDistributionAuditRequestSchema.parse(input);
+  const { lotteryDefinition, candidates } = request;
+  const betSize = validatePortfolioAuditCandidates(lotteryDefinition, candidates);
+
+  if (lotteryDefinition.id !== adapter.lotteryId) {
+    throw new Error(`No structural distribution adapter is available for lottery ${lotteryDefinition.id}.`);
+  }
+  if (!adapter.supportsDefinition(lotteryDefinition)) {
+    throw new Error(`The ${adapter.lotteryId} structural distribution adapter does not support this lottery definition.`);
+  }
+  if (betSize !== adapter.betSize) {
+    throw new Error(`The ${adapter.lotteryId} structural distribution adapter supports only ${adapter.betSize}-number bets.`);
+  }
+  throwIfStructuralDistributionCancelled(options.signal);
+
+  const counts: Record<StructuralBand, number> = {
+    ZERO_EXTREMES: 0,
+    ONE_EXTREME: 0,
+    TWO_EXTREMES: 0,
+    THREE_EXTREMES: 0,
+    FOUR_PLUS_EXTREMES: 0,
+  };
+  const totalCandidates = candidates.length;
+  let processedCandidates = 0;
+  let lastPercent = -1;
+
+  const emitProgress = (): void => {
+    const percent = Math.floor((processedCandidates * 100) / totalCandidates);
+    if (percent <= lastPercent) return;
+    lastPercent = percent;
+    options.onProgress?.(portfolioStructuralDistributionAuditProgressSchema.parse({
+      phase: "STRUCTURAL_DISTRIBUTION",
+      processedCandidates,
+      totalCandidates,
+      percent,
+    }));
+    throwIfStructuralDistributionCancelled(options.signal);
+  };
+
+  emitProgress();
+  for (const candidate of candidates) {
+    const summary = adapter.summarize(candidate.numbers);
+    if (!summary.applicable || summary.band === null || summary.extremeCount === null) {
+      throw new Error(`The ${adapter.lotteryId} structural summary is not applicable to ${betSize}-number bets.`);
+    }
+    counts[summary.band] += 1;
+    processedCandidates += 1;
+    emitProgress();
+
+    if (
+      processedCandidates % STRUCTURAL_DISTRIBUTION_AUDIT_BATCH_SIZE === 0 &&
+      processedCandidates < totalCandidates
+    ) {
+      await yieldToEventLoop();
+      throwIfStructuralDistributionCancelled(options.signal);
+    }
+  }
+
+  return portfolioStructuralDistributionAuditResultSchema.parse({
+    contractVersion: PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_CONTRACT_VERSION,
+    algorithmVersion: PORTFOLIO_STRUCTURAL_DISTRIBUTION_AUDIT_ALGORITHM_VERSION,
+    metricEngineVersion: adapter.metricEngineVersion,
+    classifierVersion: adapter.classifierVersion,
+    lottery: { id: lotteryDefinition.id, definitionVersion: lotteryDefinition.version },
+    betSize,
+    candidateCount: totalCandidates,
+    buckets: STRUCTURAL_BAND_ORDER.map((band) => ({
+      band,
+      count: counts[band],
+      frequency: reducedFrequency(counts[band], totalCandidates),
+    })),
     transient: true,
     persisted: false,
     frozen: false,

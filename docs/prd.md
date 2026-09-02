@@ -3,7 +3,7 @@
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
 **Modelo de licença:** GPL-3.0-or-later  
-**Última atualização:** 2026-08-29
+**Última atualização:** 2026-09-02
 
 ## Change log
 
@@ -16,6 +16,7 @@
 | 2026-08-29 | 0.4.3 | Ocupação de linhas/colunas normalizada por tamanho de aposta (15–20) e raridade teórica por universo | PM / AIOX |
 | 2026-08-30 | 0.4.4 | Modo avançado, coorte contextual, estratégia manual experimental e comparação pré-geração | Produto |
 | 2026-09-02 | 0.4.5 | Gate operacional da auditoria quadrática: teto, progresso, cancelamento e rejeição em preflight | Produto |
+| 2026-09-02 | 0.4.6 | Primeira distribuição estrutural de carteira restrita à Lotofácil simples, com agregação exata, progresso e cancelamento | Produto / Arquitetura |
 
 ## 1. Objetivo e contexto
 
@@ -163,6 +164,16 @@ interseções, distribuição estrutural, cobertura bruta e única, redundância
 eficiência. Cobertura aproximada deve declarar método, limite e erro; nunca pode
 ser exibida como exata.
 
+Na primeira entrega da distribuição estrutural de carteira, somente candidatos
+canônicos da Lotofácil simples de 15 dezenas são aplicáveis. O auditor reutiliza
+o MetricEngine, o StructuralClassifier e o resumo estrutural canônicos para
+agregar as cinco faixas em ordem estável, incluindo faixas com contagem zero e
+frequências exatas sobre o total de candidatos. A saída não compara estratégia,
+alocação solicitada ou massa teórica, não filtra nem reordena jogos, não otimiza,
+não calcula cobertura, não faz alegação preditiva e não altera o estado da
+carteira. Apostas de 16–20 dezenas e outras modalidades são rejeitadas como não
+aplicáveis até possuírem regras estruturais próprias versionadas.
+
 ### FR-06 - Bolão mínimo
 
 O usuário informa modalidade, concurso, tamanho de aposta e número inteiro de
@@ -213,6 +224,10 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   rejeitada antes do cálculo com erro explícito e determinístico. O limite vale
   somente para a operação quadrática e qualquer aumento exige nova decisão
   versionada acompanhada de evidência de desempenho e consumo de memória.
+  A distribuição estrutural de carteira é linear, não herda o teto de 1.000 e
+  produz saída de tamanho fixo; ainda assim, processa candidatos em lotes,
+  informa unidades processadas, total e percentual, aceita cancelamento
+  cooperativo e não publica resultado parcial quando cancelada.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
   por template.
 - **NFR-06 - Licença:** derivados do INJOLOCA obedecem GPL-3.0-or-later.
