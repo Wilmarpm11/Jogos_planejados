@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  binomialCoefficient,
   combinationRank,
   createCombinationRanker,
   forEachCombination,
@@ -23,6 +24,7 @@ import {
   EXACT_COVERAGE_AUDIT_TIMEOUT_MS,
   EXACT_COVERAGE_TIERS,
   exactCoverageAuditRequestSchema,
+  exactCoverageAuditProgressSchema,
   exactCoverageAuditResultSchema,
 } from "@boloes/lottery-contracts";
 import {
@@ -98,6 +100,9 @@ describe("combination ranking", () => {
     expect(Math.min(...ranks)).toBe(0);
     expect(Math.max(...ranks)).toBe(69);
     expect(combinationRank(8, [0, 1, 2, 3])).toBe(0);
+    const exactLargeCoefficient = Number((377_997n * 377_996n * 377_995n) / 6n);
+    expect(Number.isSafeInteger(exactLargeCoefficient)).toBe(true);
+    expect(binomialCoefficient(377_997, 3)).toBe(exactLargeCoefficient);
     expect(() => rank([0, 1, 1, 3])).toThrow("strictly increasing");
     expect(() => rank([0, 1, 2, 8])).toThrow("outside 0-7");
   });
@@ -260,6 +265,18 @@ describe("Lotofácil exact coverage audit", () => {
     expect(progress.every((event, index) => (
       index === 0 || event.processedWork > progress[index - 1]!.processedWork
     ))).toBe(true);
+    expect(exactCoverageAuditProgressSchema.safeParse({
+      phase: "COUNT_UNIQUE_OUTCOMES",
+      processedWork: 101,
+      totalWork: 100,
+      percent: 100,
+    }).success).toBe(false);
+    expect(exactCoverageAuditProgressSchema.safeParse({
+      phase: "MARK_COVERED_OUTCOMES",
+      processedWork: 25,
+      totalWork: 100,
+      percent: 24,
+    }).success).toBe(false);
   });
 
   it("cancels cooperatively and times out with typed errors and no result", async () => {

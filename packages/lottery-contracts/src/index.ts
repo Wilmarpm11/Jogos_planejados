@@ -419,7 +419,15 @@ export const exactCoverageAuditProgressSchema = z.object({
   processedWork: z.number().int().nonnegative(),
   totalWork: z.number().int().positive(),
   percent: z.number().int().min(0).max(100),
-}).strict();
+}).strict().superRefine((progress, context) => {
+  if (progress.processedWork > progress.totalWork) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Processed work cannot exceed total work." });
+  }
+  const expectedPercent = Math.floor((progress.processedWork * 100) / progress.totalWork);
+  if (progress.percent !== expectedPercent) {
+    context.addIssue({ code: "custom", path: ["percent"], message: "Progress percent must match processedWork/totalWork." });
+  }
+});
 export type ExactCoverageAuditProgress = z.infer<typeof exactCoverageAuditProgressSchema>;
 
 const exactCoverageFractionSchema = z.object({

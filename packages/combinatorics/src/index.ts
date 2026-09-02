@@ -12,14 +12,16 @@ export function binomialCoefficient(totalItems: number, selectionSize: number): 
   }
 
   const reducedSelectionSize = Math.min(selectionSize, totalItems - selectionSize);
-  let result = 1;
+  let result = 1n;
   for (let index = 1; index <= reducedSelectionSize; index += 1) {
-    result = (result * (totalItems - reducedSelectionSize + index)) / index;
-    if (!Number.isSafeInteger(result)) {
+    result = (
+      result * BigInt(totalItems - reducedSelectionSize + index)
+    ) / BigInt(index);
+    if (result > BigInt(Number.MAX_SAFE_INTEGER)) {
       throw new Error("The binomial coefficient exceeds the safe integer range.");
     }
   }
-  return result;
+  return Number(result);
 }
 
 /**
