@@ -17,6 +17,7 @@
 | 2026-08-30 | 0.4.4 | Modo avançado, coorte contextual, estratégia manual experimental e comparação pré-geração | Produto |
 | 2026-09-02 | 0.4.5 | Gate operacional da auditoria quadrática: teto, progresso, cancelamento e rejeição em preflight | Produto |
 | 2026-09-02 | 0.4.6 | Primeira distribuição estrutural de carteira restrita à Lotofácil simples, com agregação exata, progresso e cancelamento | Produto / Arquitetura |
+| 2026-09-02 | 0.4.7 | Gate da cobertura única: método exato 12+, teto de 1.000 jogos simples, timeout de 30 s e erro zero | Produto / Arquitetura |
 
 ## 1. Objetivo e contexto
 
@@ -174,6 +175,16 @@ não calcula cobertura, não faz alegação preditiva e não altera o estado da
 carteira. Apostas de 16–20 dezenas e outras modalidades são rejeitadas como não
 aplicáveis até possuírem regras estruturais próprias versionadas.
 
+Na primeira entrega de cobertura, somente carteiras de 1 a 1.000 apostas
+canônicas simples de 15 dezenas da Lotofácil são aplicáveis. O cálculo enumera
+exatamente os resultados cobertos nas faixas cumulativas 15, 14+, 13+ e 12+,
+separa cobertura bruta, única e repetida e informa eficiência como fração exata.
+O método não usa amostragem: resultados concluídos declaram erro absoluto e
+relativo zero. A execução tem timeout rígido de 30 segundos, progresso e
+cancelamento cooperativo; timeout ou cancelamento não publica resultado parcial.
+Apostas de 16–20 dezenas, aproximação, persistência, congelamento e mudança de
+estado permanecem fora desta primeira entrega.
+
 ### FR-06 - Bolão mínimo
 
 O usuário informa modalidade, concurso, tamanho de aposta e número inteiro de
@@ -228,6 +239,12 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   produz saída de tamanho fixo; ainda assim, processa candidatos em lotes,
   informa unidades processadas, total e percentual, aceita cancelamento
   cooperativo e não publica resultado parcial quando cancelada.
+  A primeira cobertura única exata aceita de 1 a 1.000 apostas simples da
+  Lotofácil e limita a execução a 30 segundos. O trabalho máximo é 59.476.000
+  visitas de resultados cobertos, seguido por uma varredura do universo de
+  3.268.760 resultados. O motor deve ceder o event loop e verificar progresso,
+  timeout e cancelamento em lotes limitados; falha antes de publicar qualquer
+  resultado quando o prazo é excedido.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
   por template.
 - **NFR-06 - Licença:** derivados do INJOLOCA obedecem GPL-3.0-or-later.
@@ -416,6 +433,13 @@ Uma aposta de 15 dezenas cobre, de forma bruta: 15 = 1 resultado; 14+ = 151;
 13+ = 4.876; 12+ = 59.476. O auditor separa cobertura bruta, única, resultados
 repetidos, redundância e eficiência.
 
+Na versão exata inicial, cada resultado de 15 dezenas recebe um índice
+combinatório determinístico no universo `C(25,15)`. Para cada aposta simples, o
+motor enumera resultados com interseção de 12 a 15 dezenas e registra o maior
+número de acertos observado por resultado. A contagem única de cada faixa é o
+número de índices cujo maior acerto alcança o limiar; cobertura repetida é
+`bruta - única` e eficiência é `única / bruta` como fração inteira reduzida.
+
 Expansão para combinações de 15: 15=1; 16=16; 17=136; 18=816; 19=3.876;
 20=15.504. A unidade interna é a combinação simples de 15, mesmo para apostas
 maiores.
@@ -480,7 +504,10 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   fórmula Lotofácil, incluindo semântica de pares consecutivos, sequências 2+,
   moldura, ocupação normalizada de linhas/colunas, desvios e canonização/ordenação
   de jogos.
-- [ ] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
+- [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
+  Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
+  simples, timeout de 30 s e erro zero, conforme
+  `docs/architecture/lotofacil-exact-coverage-contract.md`.
 - [ ] Congelar URLs, campos, validações, versão do parser e regra de
   correção/substituição da fonte CAIXA, com import manual.
 - [ ] Anexar PDF/foto/medidas finais do COLOGA ou ensaio equivalente.

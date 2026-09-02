@@ -1,0 +1,34 @@
+{
+  "story": "4.6",
+  "path": "docs/stories/4.6.lotofacil-exact-coverage-audit.story.md",
+  "validatedAt": "2026-09-02",
+  "validator": "@po",
+  "verdict": "GO",
+  "score": 10,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "executorAssignment": "PASS",
+    "fileStructure": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "securityApplicability": "PASS",
+    "taskSequence": "PASS",
+    "codeRabbitIntegration": "PASS",
+    "antiHallucination": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "niceToHave": [],
+  "notes": [
+    "Code intelligence auto-check skipped because no provider is active.",
+    "The configured PRD and architecture shard indexes are absent; monolithic documents and the directly related coverage contract were validated instead.",
+    "The gross coverage formula and C(25,15) universe were independently recomputed during validation.",
+    "ClickUp synchronization is disabled by mcp.enabled=false; the local story is the source of truth."
+  ]
+}

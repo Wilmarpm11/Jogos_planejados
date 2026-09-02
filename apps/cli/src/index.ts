@@ -19,6 +19,8 @@ import {
 import {
   manualDatasetImportSchema,
   basicPortfolioAuditRequestSchema,
+  exactCoverageAuditRequestSchema,
+  exactCoverageAuditResultSchema,
   pairwisePortfolioAuditRequestSchema,
   portfolioStructuralDistributionAuditRequestSchema,
   portfolioGenerationRequestSchema,
@@ -31,6 +33,9 @@ import {
   PairwisePortfolioAuditCancelledError,
   PortfolioStructuralDistributionAuditCancelledError,
 } from "@boloes/audit-engine";
+import {
+  auditExactPortfolioCoverage,
+} from "@boloes/coverage-engine";
 import {
   LOTOFACIL_CAIXA_PAGE_PARSER_VERSION,
   LOTOFACIL_CAIXA_PAGE_URL,
@@ -55,11 +60,13 @@ import {
   classifyLotofacilStructuralProfile,
   generateLotofacilPortfolio,
   lotofacilPortfolioStructuralDistributionAdapter,
+  lotofacilExactCoverageAdapter,
   summarizeLotofacilStructuralProfile,
   LOTOFACIL_SPECIAL_DRAW_TYPES,
   validateLotofacilStructuralAllocation,
   summarizeLotofacilStructuralAllocation,
 } from "@boloes/lottery-lotofacil";
+import { exactCoverageAuditErrorRecord, exactCoverageAuditExitCode } from "./coverage-errors.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -115,6 +122,8 @@ Comandos:
                        Audita interseções par a par com progresso e cancelamento locais.
   portfolio audit-structural-distribution --input PATH
                        Audita a distribuição estrutural Lotofácil com progresso e cancelamento locais.
+  portfolio audit-coverage --input PATH
+                       Audita cobertura exata Lotofácil 12+ com progresso, timeout e cancelamento locais.
   lotofacil occupancy --numbers 01,02,...
                        Calcula ocupação de linhas e colunas para 15–20 dezenas.
   lotofacil metrics --numbers 01,02,...
@@ -548,6 +557,31 @@ if (command === "help" || command === "--help" || command === "-h") {
     } catch (error) {
       process.stderr.write((error instanceof Error ? error.message : "Solicitação de auditoria inválida.") + "\n");
       process.exitCode = error instanceof PortfolioStructuralDistributionAuditCancelledError ? 130 : 1;
+    } finally {
+      process.off("SIGINT", cancelOnSigint);
+    }
+  }
+} else if (command === "portfolio" && process.argv[3] === "audit-coverage") {
+  const inputPath = argumentValue("--input");
+  if (!inputPath) { process.stderr.write("Informe --input com os candidatos para auditoria.\n"); process.exitCode = 1; }
+  else {
+    const cancellation = new AbortController();
+    const cancelOnSigint = (): void => cancellation.abort();
+    process.once("SIGINT", cancelOnSigint);
+    try {
+      const request = exactCoverageAuditRequestSchema.parse(
+        JSON.parse(readFileSync(resolve(inputPath), "utf8")),
+      );
+      const result = exactCoverageAuditResultSchema.parse(
+        await auditExactPortfolioCoverage(request, lotofacilExactCoverageAdapter, {
+          signal: cancellation.signal,
+          onProgress: (progress) => process.stderr.write(JSON.stringify(progress) + "\n"),
+        }),
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch (error) {
+      process.stderr.write(JSON.stringify(exactCoverageAuditErrorRecord(error)) + "\n");
+      process.exitCode = exactCoverageAuditExitCode(error);
     } finally {
       process.off("SIGINT", cancelOnSigint);
     }

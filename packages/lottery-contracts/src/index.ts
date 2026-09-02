@@ -380,6 +380,175 @@ export const pairwisePortfolioAuditResultSchema = z.object({
 }).strict();
 export type PairwisePortfolioAuditResult = z.infer<typeof pairwisePortfolioAuditResultSchema>;
 
+export const EXACT_COVERAGE_AUDIT_CONTRACT_VERSION = "1.0" as const;
+export const EXACT_COVERAGE_AUDIT_ALGORITHM_VERSION = "dense-combinatorial-union/1.0.0" as const;
+export const EXACT_COVERAGE_AUDIT_METHOD = "EXACT_ENUMERATION" as const;
+export const EXACT_COVERAGE_AUDIT_MIN_CANDIDATES = 1;
+export const EXACT_COVERAGE_AUDIT_MAX_CANDIDATES = 1_000;
+export const EXACT_COVERAGE_AUDIT_TIMEOUT_MS = 30_000;
+export const EXACT_COVERAGE_AUDIT_MAX_WORK_BATCH_SIZE = 65_536;
+export const EXACT_COVERAGE_LOTOFACIL_ID = "lotofacil" as const;
+export const EXACT_COVERAGE_LOTOFACIL_DEFINITION_VERSION = "1.0.0" as const;
+export const EXACT_COVERAGE_LOTOFACIL_UNIVERSE_SIZE = 3_268_760;
+export const EXACT_COVERAGE_LOTOFACIL_BET_SIZE = 15;
+export const EXACT_COVERAGE_TIERS = [
+  { minimumHits: 15, grossCoveredOutcomesPerCandidate: 1 },
+  { minimumHits: 14, grossCoveredOutcomesPerCandidate: 151 },
+  { minimumHits: 13, grossCoveredOutcomesPerCandidate: 4_876 },
+  { minimumHits: 12, grossCoveredOutcomesPerCandidate: 59_476 },
+] as const;
+
+export const exactCoverageAuditErrorCodeSchema = z.enum([
+  "COVERAGE_CANCELLED",
+  "COVERAGE_TIMEOUT",
+]);
+export type ExactCoverageAuditErrorCode = z.infer<typeof exactCoverageAuditErrorCodeSchema>;
+
+/** Bounded, history-free input for the first exact coverage contract. */
+export const exactCoverageAuditRequestSchema = z.object({
+  contractVersion: z.literal(EXACT_COVERAGE_AUDIT_CONTRACT_VERSION),
+  lotteryDefinition: lotteryDefinitionSchema,
+  candidates: z.array(basicPortfolioAuditCandidateSchema)
+    .min(EXACT_COVERAGE_AUDIT_MIN_CANDIDATES)
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+}).strict();
+export type ExactCoverageAuditRequest = z.infer<typeof exactCoverageAuditRequestSchema>;
+
+export const exactCoverageAuditProgressSchema = z.object({
+  phase: z.enum(["MARK_COVERED_OUTCOMES", "COUNT_UNIQUE_OUTCOMES"]),
+  processedWork: z.number().int().nonnegative(),
+  totalWork: z.number().int().positive(),
+  percent: z.number().int().min(0).max(100),
+}).strict().superRefine((progress, context) => {
+  if (progress.processedWork > progress.totalWork) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Processed work cannot exceed total work." });
+  }
+  const expectedPercent = Math.floor((progress.processedWork * 100) / progress.totalWork);
+  if (progress.percent !== expectedPercent) {
+    context.addIssue({ code: "custom", path: ["percent"], message: "Progress percent must match processedWork/totalWork." });
+  }
+});
+export type ExactCoverageAuditProgress = z.infer<typeof exactCoverageAuditProgressSchema>;
+
+const exactCoverageFractionSchema = z.object({
+  numerator: z.number().int().nonnegative(),
+  denominator: z.number().int().positive(),
+}).strict();
+
+const exactCoverageTierResultSchema = z.object({
+  minimumHits: z.number().int().min(1),
+  grossCoveredOutcomes: z.number().int().positive(),
+  uniqueCoveredOutcomes: z.number().int().nonnegative(),
+  repeatedCoveredOutcomes: z.number().int().nonnegative(),
+  efficiency: exactCoverageFractionSchema,
+}).strict();
+
+const exactCoverageAuditResultObjectSchema = z.object({
+  contractVersion: z.literal(EXACT_COVERAGE_AUDIT_CONTRACT_VERSION),
+  algorithmVersion: z.literal(EXACT_COVERAGE_AUDIT_ALGORITHM_VERSION),
+  adapterVersion: z.string().min(1),
+  method: z.literal(EXACT_COVERAGE_AUDIT_METHOD),
+  exact: z.literal(true),
+  absoluteError: z.literal(0),
+  relativeError: exactCoverageFractionSchema,
+  lottery: z.object({ id: z.string().min(1), definitionVersion: z.string().min(1) }).strict(),
+  universeSize: z.number().int().positive(),
+  betSize: z.number().int().positive(),
+  candidateCount: z.number().int().min(EXACT_COVERAGE_AUDIT_MIN_CANDIDATES)
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+  timeoutMs: z.literal(EXACT_COVERAGE_AUDIT_TIMEOUT_MS),
+  totalWork: z.number().int().positive(),
+  processedWork: z.number().int().positive(),
+  tiers: z.array(exactCoverageTierResultSchema).min(1),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(true),
+  portfolioStateChanged: z.literal(false),
+}).strict();
+
+/** Modality-neutral result shape used by reusable exact-coverage engines. */
+export const exactCoverageAuditResultBaseSchema = exactCoverageAuditResultObjectSchema.superRefine((result, context) => {
+  if (result.relativeError.numerator !== 0 || result.relativeError.denominator !== 1) {
+    context.addIssue({ code: "custom", path: ["relativeError"], message: "Exact coverage relative error must be 0/1." });
+  }
+  if (result.processedWork !== result.totalWork) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Completed coverage must process all declared work." });
+  }
+  result.tiers.forEach((tier, index) => {
+    if (index > 0 && tier.minimumHits >= result.tiers[index - 1]!.minimumHits) {
+      context.addIssue({ code: "custom", path: ["tiers", index, "minimumHits"], message: "Coverage tiers must use strictly descending minimumHits." });
+    }
+    if (tier.uniqueCoveredOutcomes + tier.repeatedCoveredOutcomes !== tier.grossCoveredOutcomes) {
+      context.addIssue({ code: "custom", path: ["tiers", index], message: "Unique and repeated coverage must conserve gross coverage." });
+    }
+    const divisor = contractGreatestCommonDivisor(tier.uniqueCoveredOutcomes, tier.grossCoveredOutcomes);
+    if (
+      tier.efficiency.numerator !== tier.uniqueCoveredOutcomes / divisor ||
+      tier.efficiency.denominator !== tier.grossCoveredOutcomes / divisor
+    ) {
+      context.addIssue({ code: "custom", path: ["tiers", index, "efficiency"], message: "Coverage efficiency must be the reduced exact unique/gross fraction." });
+    }
+    if (tier.uniqueCoveredOutcomes > result.universeSize) {
+      context.addIssue({ code: "custom", path: ["tiers", index, "uniqueCoveredOutcomes"], message: "Unique coverage cannot exceed the outcome universe." });
+    }
+  });
+});
+export type ExactCoverageAuditBaseResult = z.infer<typeof exactCoverageAuditResultBaseSchema>;
+
+/** Public contract 1.0, frozen to the first Lotofácil 15-number integration. */
+export const exactCoverageAuditResultSchema = exactCoverageAuditResultBaseSchema.superRefine((result, context) => {
+  if (
+    result.lottery.id !== EXACT_COVERAGE_LOTOFACIL_ID ||
+    result.lottery.definitionVersion !== EXACT_COVERAGE_LOTOFACIL_DEFINITION_VERSION ||
+    result.universeSize !== EXACT_COVERAGE_LOTOFACIL_UNIVERSE_SIZE ||
+    result.betSize !== EXACT_COVERAGE_LOTOFACIL_BET_SIZE
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["lottery"],
+      message: "Public coverage results require Lotofácil 25/15 version 1.0.0.",
+    });
+  }
+  if (result.tiers.length !== EXACT_COVERAGE_TIERS.length) {
+    context.addIssue({ code: "custom", path: ["tiers"], message: "Lotofácil coverage must contain all four canonical tiers." });
+  }
+  result.tiers.forEach((tier, index) => {
+    const expected = EXACT_COVERAGE_TIERS[index];
+    if (!expected) return;
+    if (tier.minimumHits !== expected.minimumHits) {
+      context.addIssue({ code: "custom", path: ["tiers", index, "minimumHits"], message: "Lotofácil coverage tiers must use canonical order." });
+    }
+    if (
+      tier.grossCoveredOutcomes !==
+      result.candidateCount * expected.grossCoveredOutcomesPerCandidate
+    ) {
+      context.addIssue({ code: "custom", path: ["tiers", index, "grossCoveredOutcomes"], message: "Lotofácil gross coverage must match its canonical tier mass." });
+    }
+  });
+});
+export type ExactCoverageAuditResult = z.infer<typeof exactCoverageAuditResultSchema>;
+
+/** Lottery-owned enumeration bridge; the coverage engine owns union semantics. */
+export interface ExactCoverageTierDefinition {
+  readonly minimumHits: number;
+  readonly grossCoveredOutcomesPerCandidate: number;
+}
+
+export interface ExactCoverageAdapter {
+  readonly lotteryId: string;
+  readonly adapterVersion: string;
+  readonly betSize: number;
+  readonly universeSize: number;
+  readonly coveredOutcomeVisitsPerCandidate: number;
+  readonly tiers: readonly ExactCoverageTierDefinition[];
+  supportsDefinition(definition: LotteryDefinition): boolean;
+  enumerateCoveredOutcomeRanks(
+    numbers: readonly number[],
+    visitor: (rank: number, hits: number) => void,
+  ): void;
+}
+
 export interface DeterministicRandom {
   nextInt(upperExclusive: number): number;
 }

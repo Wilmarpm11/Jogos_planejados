@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@boloes/audit-engine": "file:../../packages/audit-engine",
+    "@boloes/coverage-engine": "file:../../packages/coverage-engine",
     "@boloes/data-access": "file:../../packages/data-access",
     "@boloes/result-ingestion": "file:../../packages/result-ingestion",
     "@boloes/strategy-registry": "file:../../packages/strategy-registry",

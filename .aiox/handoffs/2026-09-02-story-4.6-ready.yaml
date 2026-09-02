@@ -1,0 +1,28 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T20:00:00Z"
+  from_agent: "po"
+  to_agent: "dev"
+  last_command: "*validate-story-draft"
+  story_context:
+    story_id: "4.6"
+    story_path: "docs/stories/4.6.lotofacil-exact-coverage-audit.story.md"
+    story_status: "Ready"
+    priority: "P0"
+    branch: "feature/4.6-lotofacil-exact-coverage-audit"
+  decisions:
+    - "Criar contrato reutilizável e coverage-engine; reutilizar combinatorics; não criar skill."
+    - "Restringir a primeira integração à Lotofácil 25/15 e a 1–1.000 apostas simples."
+    - "Calcular exatamente as faixas cumulativas 15, 14+, 13+ e 12+ por ranking combinatório e mapa denso."
+    - "Fixar timeout em 30 segundos, lote máximo em 65.536 visitas e erro zero; cancelamento/timeout não retornam parcial."
+    - "Expansão 16–20, aproximação, otimização, persistência, congelamento e UI permanecem fora do escopo."
+  files_modified:
+    - "docs/prd.md"
+    - "docs/architecture/lotofacil-exact-coverage-contract.md"
+    - "docs/stories/4.6.lotofacil-exact-coverage-audit.story.md"
+    - ".ai/story-validation-4.6.json"
+    - ".aiox/handoffs/2026-09-02-story-4.5-closure.yaml"
+    - ".aiox/handoffs/2026-09-02-story-4.6-ready.yaml"
+  blockers: []
+  next_action: "Usar @dev *develop 4.6; implementar somente após consumir este handoff."
