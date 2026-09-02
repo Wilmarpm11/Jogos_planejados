@@ -1,0 +1,26 @@
+consumed: false
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T20:47:31Z"
+  from_agent: "po"
+  to_agent: "pm"
+  last_command: "*close-story"
+  story_context:
+    story_id: "4.6"
+    story_path: "docs/stories/4.6.lotofacil-exact-coverage-audit.story.md"
+    story_status: "Done"
+    qa_gate: "PASS"
+    reviewed_revision: "commit:dac8d226b417935c06d3453e7957c54665da7e22"
+    pull_request: "https://github.com/Wilmarpm11/Jogos_planejados/pull/4"
+    branch: "main"
+  decisions:
+    - "Story 4.6 integrada por squash no commit dac8d226b417935c06d3453e7957c54665da7e22."
+    - "CodeRabbit remoto concluiu com SUCCESS; a revisão local final do diff comprometido retornou zero achados."
+    - "O gate QA PASS foi verificado após o merge e vinculado ao squash commit."
+    - "Não existe artefato de epic/backlog local adicional; o Change Log recebeu a chave idempotente de fechamento."
+  files_modified:
+    - "docs/qa/gates/4.6-lotofacil-exact-coverage-audit.yml"
+    - "docs/stories/4.6.lotofacil-exact-coverage-audit.story.md"
+    - ".aiox/handoffs/2026-09-02-story-4.6-closure.yaml"
+  blockers: []
+  next_action: "Produto e Arquitetura devem selecionar e definir a próxima fatia elegível do backlog usando PRD e arquitetura como fontes, antes de o Scrum Master redigir nova story."
