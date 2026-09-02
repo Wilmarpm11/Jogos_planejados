@@ -91,5 +91,5 @@ permanece neutro, `lottery-contracts -> combinatorics` é uma dependência inter
 unidirecional, as regras 25/15 continuam isoladas no adaptador Lotofácil e a
 cobertura 4.6 não recebeu expansão implícita. O cenário máximo materializou
 15.504 candidatos em aproximadamente 0,26 s, com saída JSON de cerca de 810 KB;
-lint, typecheck, 34 testes direcionados/regressivos e os 164 testes integrais
+lint, typecheck, 35 testes direcionados/regressivos e os 165 testes integrais
 passaram.
