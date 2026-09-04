@@ -11,7 +11,7 @@ import {
   createDeterministicRandom,
   canonicalBetExpansionRequestSchema,
   validateCanonicalBetExpansionResult,
-  type CanonicalBetExpansionAdapter,
+  type ExpandedCoverageCompositionExpansionAdapter,
   type CanonicalBetExpansionResult,
   type ExactFraction,
   type ExactCoverageAdapter,
@@ -329,7 +329,8 @@ export function expandLotofacilCanonicalBet(
   });
 }
 
-export const lotofacilCanonicalBetExpansionAdapter: CanonicalBetExpansionAdapter = {
+export const lotofacilCanonicalBetExpansionAdapter:
+  ExpandedCoverageCompositionExpansionAdapter = {
   lotteryId: LOTOFACIL_ID,
   adapterVersion: LOTOFACIL_CANONICAL_BET_EXPANSION_ADAPTER_VERSION,
   supportsDefinition: isLotofacilDefinition,

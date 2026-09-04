@@ -41,14 +41,18 @@ duplicadas dentro do teto existente de 1.000 candidatos simples.
 - **Razão:** duplicatas compõem a massa bruta e a redundância da cobertura.
 - **Alternativas:** deduplicar antes da auditoria; reordenar globalmente.
 
-### 4. Versionar também os adaptadores componentes
+### 4. Versionar adaptadores sem alterar o contrato legado
 
 - **Tipo:** rastreabilidade
 - **Prioridade:** alta
-- **Decisão:** adicionar metadado aditivo `adapterVersion` ao adaptador de
-  expansão e publicar versões de composição, expansão e cobertura no resultado.
-- **Razão:** permite reproduzir o caminho completo sem alterar contratos 1.0.
-- **Alternativas:** registrar somente versões dos contratos e algoritmos.
+- **Decisão:** manter `CanonicalBetExpansionAdapter` inalterado e exigir
+  `adapterVersion` somente em `ExpandedCoverageCompositionExpansionAdapter`,
+  extensão pertencente ao contrato novo de composição; publicar as versões dos
+  componentes no resultado.
+- **Razão:** preserva compatibilidade de fonte com adaptadores da Story 4.7 e
+  mantém a proveniência reproduzível exigida pela composição 4.8.
+- **Alternativas:** tornar `adapterVersion` obrigatório no contrato legado;
+  torná-lo opcional e adiar a falha para runtime.
 
 ### 5. Reutilizar limites operacionais da cobertura
 
@@ -77,6 +81,9 @@ duplicadas dentro do teto existente de 1.000 candidatos simples.
 - `npm ls --all` — PASS; workspaces deduplicados, sem dependência nova
 - `git diff --check` — PASS
 - CodeRabbit local — 1 minor e 1 major corrigidos; rodada final com 0 achados
+- correção pós-review — fixture TypeScript do adaptador legado compila sem
+  `adapterVersion`; teste direcionado 9/9, suíte integral 174/174, lint,
+  typecheck e dependências PASS
 
 ## Consequences
 

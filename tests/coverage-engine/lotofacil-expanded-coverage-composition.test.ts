@@ -18,6 +18,7 @@ import {
   expandedCoverageCompositionRequestSchema,
   expandedCoverageCompositionResultBaseSchema,
   expandedCoverageCompositionResultSchema,
+  type CanonicalBetExpansionAdapter,
   type ExactCoverageAdapter,
 } from "@boloes/lottery-contracts";
 import {
@@ -70,6 +71,17 @@ function tinyCoverageAdapter(
 }
 
 describe("Lotofácil expanded exact-coverage composition", () => {
+  it("keeps the Story 4.7 expansion adapter contract source-compatible", () => {
+    const legacyAdapter: CanonicalBetExpansionAdapter = {
+      lotteryId: lotofacilCanonicalBetExpansionAdapter.lotteryId,
+      supportsDefinition: lotofacilCanonicalBetExpansionAdapter.supportsDefinition,
+      expand: lotofacilCanonicalBetExpansionAdapter.expand,
+    };
+
+    expect("adapterVersion" in legacyAdapter).toBe(false);
+    expect(legacyAdapter.supportsDefinition(LOTOFACIL_DEFINITION)).toBe(true);
+  });
+
   it("composes one canonical source with the unchanged exact coverage contracts", async () => {
     const result = await auditExpandedPortfolioCoverage(
       request([{ numbers: sourceNumbers(15) }]),

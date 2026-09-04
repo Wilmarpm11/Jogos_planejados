@@ -16,7 +16,7 @@ import {
   expandedCoverageCompositionRequestSchema,
   validateCanonicalBetExpansionResult,
   validateExpandedCoverageCompositionBaseResult,
-  type CanonicalBetExpansionAdapter,
+  type ExpandedCoverageCompositionExpansionAdapter,
   type ExactCoverageAdapter,
   type ExactCoverageAuditErrorCode,
   type ExactCoverageAuditProgress,
@@ -233,7 +233,7 @@ export async function auditExactPortfolioCoverage(
 
 function assertCompositionAdapters(
   lotteryDefinition: LotteryDefinition,
-  expansionAdapter: CanonicalBetExpansionAdapter,
+  expansionAdapter: ExpandedCoverageCompositionExpansionAdapter,
   coverageAdapter: ExactCoverageAdapter,
 ): void {
   if (
@@ -269,7 +269,7 @@ function throwIfCompositionCancelled(signal?: AbortSignal): void {
 
 function materializeExpandedSources(
   request: ExpandedCoverageCompositionRequest,
-  expansionAdapter: CanonicalBetExpansionAdapter,
+  expansionAdapter: ExpandedCoverageCompositionExpansionAdapter,
   signal?: AbortSignal,
 ): ExpandedSources {
   const sources: ExpandedSourceSummary[] = [];
@@ -306,7 +306,7 @@ function materializeExpandedSources(
  */
 export async function auditExpandedPortfolioCoverage(
   input: unknown,
-  expansionAdapter: CanonicalBetExpansionAdapter,
+  expansionAdapter: ExpandedCoverageCompositionExpansionAdapter,
   coverageAdapter: ExactCoverageAdapter,
   options: ExactCoverageAuditOptions = {},
 ): Promise<ExpandedCoverageCompositionBaseResult> {

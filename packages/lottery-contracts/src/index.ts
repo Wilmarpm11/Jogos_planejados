@@ -540,9 +540,14 @@ export function validateCanonicalBetExpansionResult(
 /** Reusable contract implemented by lottery-owned canonical expansion adapters. */
 export interface CanonicalBetExpansionAdapter {
   readonly lotteryId: string;
-  readonly adapterVersion: string;
   supportsDefinition(definition: LotteryDefinition): boolean;
   expand(request: CanonicalBetExpansionRequest): CanonicalBetExpansionResult;
+}
+
+/** Composition-only extension that adds the adapter provenance required by Story 4.8. */
+export interface ExpandedCoverageCompositionExpansionAdapter
+  extends CanonicalBetExpansionAdapter {
+  readonly adapterVersion: string;
 }
 
 export const basicPortfolioAuditCandidateSchema = z.object({
