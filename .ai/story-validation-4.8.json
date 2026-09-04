@@ -1,0 +1,35 @@
+{
+  "story": "4.8",
+  "path": "docs/stories/4.8.lotofacil-expanded-coverage-composition.story.md",
+  "validatedAt": "2026-09-02",
+  "validator": "@po",
+  "verdict": "GO",
+  "score": 10,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "executorAssignment": "PASS",
+    "fileStructure": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "securityApplicability": "PASS",
+    "taskSequence": "PASS",
+    "codeRabbitIntegration": "PASS",
+    "antiHallucination": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "niceToHave": [],
+  "notes": [
+    "Code intelligence auto-check skipped because no provider is active.",
+    "The configured PRD and architecture shard indexes are absent; monolithic documents and the directly related contracts were validated instead.",
+    "The cumulative expansion limit was cross-checked against the existing 1,000-candidate exact-coverage contract and the 15-20 expansion counts.",
+    "A local benchmark for one 18-number source measured 816 candidates in 3,125.97 ms total, within the 30,000 ms coverage timeout.",
+    "ClickUp synchronization is disabled by mcp.enabled=false; the local story is the source of truth."
+  ]
+}

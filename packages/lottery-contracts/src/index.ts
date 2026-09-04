@@ -544,6 +544,12 @@ export interface CanonicalBetExpansionAdapter {
   expand(request: CanonicalBetExpansionRequest): CanonicalBetExpansionResult;
 }
 
+/** Composition-only extension that adds the adapter provenance required by Story 4.8. */
+export interface ExpandedCoverageCompositionExpansionAdapter
+  extends CanonicalBetExpansionAdapter {
+  readonly adapterVersion: string;
+}
+
 export const basicPortfolioAuditCandidateSchema = z.object({
   numbers: z.array(z.number().int().positive()),
 }).strict();
@@ -816,6 +822,346 @@ export interface ExactCoverageAdapter {
     numbers: readonly number[],
     visitor: (rank: number, hits: number) => void,
   ): void;
+}
+
+export const EXPANDED_COVERAGE_COMPOSITION_CONTRACT_VERSION = "1.0" as const;
+export const EXPANDED_COVERAGE_COMPOSITION_ALGORITHM_VERSION =
+  "expand-then-cover/1.0.0" as const;
+
+const expandedCoverageSourceBetSchema = canonicalBetExpansionBetSchema;
+
+/** Bounded, modality-neutral input for composing expansion with exact coverage. */
+export const expandedCoverageCompositionRequestSchema = z.object({
+  contractVersion: z.literal(EXPANDED_COVERAGE_COMPOSITION_CONTRACT_VERSION),
+  lotteryDefinition: lotteryDefinitionSchema.strict(),
+  sourceBets: z.array(expandedCoverageSourceBetSchema)
+    .min(1)
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+}).strict().superRefine((request, context) => {
+  let expandedCandidateCount = 0;
+
+  request.sourceBets.forEach((sourceBet, sourceIndex) => {
+    const expansionRequest = {
+      contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+      lotteryDefinition: request.lotteryDefinition,
+      sourceBet,
+    };
+    const parsed = canonicalBetExpansionRequestSchema.safeParse(expansionRequest);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        const mappedPath = issue.path[0] === "sourceBet"
+          ? ["sourceBets", sourceIndex, ...issue.path.slice(1)]
+          : issue.path;
+        context.addIssue({
+          code: "custom",
+          path: mappedPath,
+          message: issue.message,
+        });
+      }
+      return;
+    }
+
+    const sourceCandidateCount = binomialCoefficient(
+      sourceBet.numbers.length,
+      request.lotteryDefinition.drawSize,
+    );
+    if (!Number.isSafeInteger(expandedCandidateCount + sourceCandidateCount)) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceBets", sourceIndex],
+        message: "Expanded candidate count must fit the safe integer range.",
+      });
+      return;
+    }
+    expandedCandidateCount += sourceCandidateCount;
+  });
+
+  if (expandedCandidateCount > EXACT_COVERAGE_AUDIT_MAX_CANDIDATES) {
+    context.addIssue({
+      code: "custom",
+      path: ["sourceBets"],
+      message: `Expanded coverage is limited to ${EXACT_COVERAGE_AUDIT_MAX_CANDIDATES} candidate occurrences.`,
+    });
+  }
+});
+export type ExpandedCoverageCompositionRequest = z.infer<
+  typeof expandedCoverageCompositionRequestSchema
+>;
+
+const expandedCoverageSourceSummarySchema = z.object({
+  sourceIndex: z.number().int().nonnegative(),
+  sourceBet: expandedCoverageSourceBetSchema,
+  sourceBetSize: z.number().int().positive(),
+  expectedCandidateCount: z.number().int().positive(),
+}).strict();
+
+const expandedCoverageComponentVersionsSchema = z.object({
+  expansionContractVersion: z.literal(CANONICAL_BET_EXPANSION_CONTRACT_VERSION),
+  expansionAlgorithmVersion: z.literal(CANONICAL_BET_EXPANSION_ALGORITHM_VERSION),
+  expansionAdapterVersion: z.string().min(1),
+  coverageContractVersion: z.literal(EXACT_COVERAGE_AUDIT_CONTRACT_VERSION),
+  coverageAlgorithmVersion: z.literal(EXACT_COVERAGE_AUDIT_ALGORITHM_VERSION),
+  coverageAdapterVersion: z.string().min(1),
+}).strict();
+
+export const expandedCoverageCompositionResultBaseSchema = z.object({
+  contractVersion: z.literal(EXPANDED_COVERAGE_COMPOSITION_CONTRACT_VERSION),
+  algorithmVersion: z.literal(EXPANDED_COVERAGE_COMPOSITION_ALGORITHM_VERSION),
+  componentVersions: expandedCoverageComponentVersionsSchema,
+  lottery: z.object({
+    id: z.string().min(1),
+    definitionVersion: z.string().min(1),
+  }).strict(),
+  sourceBetCount: z.number().int().positive()
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+  sources: z.array(expandedCoverageSourceSummarySchema)
+    .min(1)
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+  expandedCandidateCount: z.number().int().positive()
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+  distinctCandidateCount: z.number().int().positive()
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES),
+  duplicateCandidateOccurrences: z.number().int().nonnegative()
+    .max(EXACT_COVERAGE_AUDIT_MAX_CANDIDATES - 1),
+  coverage: exactCoverageAuditResultBaseSchema,
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict().superRefine((result, context) => {
+  if (result.sourceBetCount !== result.sources.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["sourceBetCount"],
+      message: "Source bet count must match source summaries.",
+    });
+  }
+
+  let summarizedCandidateCount = 0;
+  result.sources.forEach((source, index) => {
+    if (source.sourceIndex !== index) {
+      context.addIssue({
+        code: "custom",
+        path: ["sources", index, "sourceIndex"],
+        message: "Source summaries must preserve zero-based input order.",
+      });
+    }
+    if (source.sourceBet.numbers.length !== source.sourceBetSize) {
+      context.addIssue({
+        code: "custom",
+        path: ["sources", index, "sourceBetSize"],
+        message: "Source bet size must match source numbers.",
+      });
+    }
+    source.sourceBet.numbers.forEach((number, numberIndex) => {
+      if (
+        numberIndex > 0 &&
+        number <= source.sourceBet.numbers[numberIndex - 1]!
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["sources", index, "sourceBet", "numbers", numberIndex],
+          message: "Source bet numbers must be unique and in strictly ascending order.",
+        });
+      }
+    });
+    try {
+      const derivedCandidateCount = binomialCoefficient(
+        source.sourceBetSize,
+        result.coverage.betSize,
+      );
+      if (source.expectedCandidateCount !== derivedCandidateCount) {
+        context.addIssue({
+          code: "custom",
+          path: ["sources", index, "expectedCandidateCount"],
+          message: "Source summary candidate count must match its canonical expansion.",
+        });
+      }
+    } catch {
+      context.addIssue({
+        code: "custom",
+        path: ["sources", index, "expectedCandidateCount"],
+        message: "Source summary candidate count must fit the safe integer range.",
+      });
+    }
+    summarizedCandidateCount += source.expectedCandidateCount;
+  });
+
+  if (summarizedCandidateCount !== result.expandedCandidateCount) {
+    context.addIssue({
+      code: "custom",
+      path: ["expandedCandidateCount"],
+      message: "Expanded candidate count must match the sum of source summaries.",
+    });
+  }
+  if (
+    result.distinctCandidateCount + result.duplicateCandidateOccurrences !==
+    result.expandedCandidateCount
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["duplicateCandidateOccurrences"],
+      message: "Distinct and duplicate candidate occurrences must conserve the expanded total.",
+    });
+  }
+  if (result.coverage.candidateCount !== result.expandedCandidateCount) {
+    context.addIssue({
+      code: "custom",
+      path: ["coverage", "candidateCount"],
+      message: "Coverage candidate count must match the expanded occurrence total.",
+    });
+  }
+  if (
+    result.coverage.lottery.id !== result.lottery.id ||
+    result.coverage.lottery.definitionVersion !== result.lottery.definitionVersion
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["coverage", "lottery"],
+      message: "Coverage lottery must match the composition lottery.",
+    });
+  }
+  if (
+    result.componentVersions.coverageAdapterVersion !==
+    result.coverage.adapterVersion
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["componentVersions", "coverageAdapterVersion"],
+      message: "Coverage adapter version must match the nested coverage result.",
+    });
+  }
+});
+export type ExpandedCoverageCompositionBaseResult = z.infer<
+  typeof expandedCoverageCompositionResultBaseSchema
+>;
+
+/** Public result boundary frozen to the first Lotofácil exact integration. */
+export const expandedCoverageCompositionResultSchema =
+  expandedCoverageCompositionResultBaseSchema.superRefine((result, context) => {
+    const parsedCoverage = exactCoverageAuditResultSchema.safeParse(result.coverage);
+    if (!parsedCoverage.success) {
+      context.addIssue({
+        code: "custom",
+        path: ["coverage"],
+        message: "Expanded coverage results require the canonical Lotofácil exact coverage contract.",
+      });
+    }
+    if (
+      result.lottery.id !== EXACT_COVERAGE_LOTOFACIL_ID ||
+      result.lottery.definitionVersion !== EXACT_COVERAGE_LOTOFACIL_DEFINITION_VERSION
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["lottery"],
+        message: "Expanded coverage results require Lotofácil 25/15 version 1.0.0.",
+      });
+    }
+    result.sources.forEach((source, index) => {
+      const parsedSource = canonicalBetExpansionRequestSchema.safeParse({
+        contractVersion: CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
+        lotteryDefinition: {
+          id: EXACT_COVERAGE_LOTOFACIL_ID,
+          version: EXACT_COVERAGE_LOTOFACIL_DEFINITION_VERSION,
+          totalNumbers: 25,
+          drawSize: EXACT_COVERAGE_LOTOFACIL_BET_SIZE,
+          minBetSize: 15,
+          maxBetSize: 20,
+        },
+        sourceBet: source.sourceBet,
+      });
+      if (!parsedSource.success) {
+        context.addIssue({
+          code: "custom",
+          path: ["sources", index, "sourceBet"],
+          message: "Expanded coverage source summaries require canonical Lotofácil bets.",
+        });
+      }
+    });
+  });
+export type ExpandedCoverageCompositionResult = z.infer<
+  typeof expandedCoverageCompositionResultSchema
+>;
+
+function validateExpandedCoverageCompositionExecutionLink(
+  { request, result }: {
+    request: ExpandedCoverageCompositionRequest;
+    result: ExpandedCoverageCompositionBaseResult;
+  },
+  context: z.RefinementCtx,
+): void {
+  if (
+    result.lottery.id !== request.lotteryDefinition.id ||
+    result.lottery.definitionVersion !== request.lotteryDefinition.version
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["result", "lottery"],
+      message: "Composition result lottery must match the originating request.",
+    });
+  }
+  if (result.sources.length !== request.sourceBets.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["result", "sources"],
+      message: "Composition result sources must match the originating request count.",
+    });
+    return;
+  }
+
+  result.sources.forEach((source, index) => {
+    const requestedSource = request.sourceBets[index]!;
+    if (
+      source.sourceBet.numbers.length !== requestedSource.numbers.length ||
+      source.sourceBet.numbers.some(
+        (number, numberIndex) => number !== requestedSource.numbers[numberIndex],
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["result", "sources", index, "sourceBet"],
+        message: "Source summary must match its originating request entry.",
+      });
+    }
+
+    const expectedCandidateCount = binomialCoefficient(
+      requestedSource.numbers.length,
+      request.lotteryDefinition.drawSize,
+    );
+    if (source.expectedCandidateCount !== expectedCandidateCount) {
+      context.addIssue({
+        code: "custom",
+        path: ["result", "sources", index, "expectedCandidateCount"],
+        message: "Source summary candidate count must match its canonical expansion.",
+      });
+    }
+  });
+}
+
+/** Modality-neutral execution boundary used by the reusable engine. */
+export const expandedCoverageCompositionExecutionBaseSchema = z.object({
+  request: expandedCoverageCompositionRequestSchema,
+  result: expandedCoverageCompositionResultBaseSchema,
+}).strict().superRefine(validateExpandedCoverageCompositionExecutionLink);
+
+/** Public Lotofácil execution boundary, including every integration invariant. */
+export const expandedCoverageCompositionExecutionSchema = z.object({
+  request: expandedCoverageCompositionRequestSchema,
+  result: expandedCoverageCompositionResultSchema,
+}).strict().superRefine(validateExpandedCoverageCompositionExecutionLink);
+
+export function validateExpandedCoverageCompositionBaseResult(
+  request: ExpandedCoverageCompositionRequest,
+  result: unknown,
+): ExpandedCoverageCompositionBaseResult {
+  return expandedCoverageCompositionExecutionBaseSchema.parse({ request, result }).result;
+}
+
+export function validateExpandedCoverageCompositionResult(
+  request: ExpandedCoverageCompositionRequest,
+  result: unknown,
+): ExpandedCoverageCompositionResult {
+  return expandedCoverageCompositionExecutionSchema.parse({ request, result }).result;
 }
 
 export interface DeterministicRandom {

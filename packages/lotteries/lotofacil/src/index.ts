@@ -11,7 +11,7 @@ import {
   createDeterministicRandom,
   canonicalBetExpansionRequestSchema,
   validateCanonicalBetExpansionResult,
-  type CanonicalBetExpansionAdapter,
+  type ExpandedCoverageCompositionExpansionAdapter,
   type CanonicalBetExpansionResult,
   type ExactFraction,
   type ExactCoverageAdapter,
@@ -61,6 +61,8 @@ export const LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION = "1.0.0";
 export const LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION = "1.0.0";
 export const LOTOFACIL_EXACT_COVERAGE_ADAPTER_VERSION = "lotofacil-exact-coverage/1.0.0";
+export const LOTOFACIL_CANONICAL_BET_EXPANSION_ADAPTER_VERSION =
+  "lotofacil-canonical-bet-expansion/1.0.0";
 export const LOTOFACIL_CANONICAL_FORMULA_VERSION = "1.0.0";
 export const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
 const LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE = 3_268_760;
@@ -327,8 +329,10 @@ export function expandLotofacilCanonicalBet(
   });
 }
 
-export const lotofacilCanonicalBetExpansionAdapter: CanonicalBetExpansionAdapter = {
+export const lotofacilCanonicalBetExpansionAdapter:
+  ExpandedCoverageCompositionExpansionAdapter = {
   lotteryId: LOTOFACIL_ID,
+  adapterVersion: LOTOFACIL_CANONICAL_BET_EXPANSION_ADAPTER_VERSION,
   supportsDefinition: isLotofacilDefinition,
   expand: expandLotofacilCanonicalBet,
 };

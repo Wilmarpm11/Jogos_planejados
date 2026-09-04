@@ -1,0 +1,27 @@
+consumed: true
+handoff:
+  version: "1.0"
+  timestamp: "2026-09-02T22:10:32Z"
+  from_agent: "po"
+  to_agent: "dev"
+  last_command: "*validate-story-draft"
+  story_context:
+    story_id: "4.8"
+    story_path: "docs/stories/4.8.lotofacil-expanded-coverage-composition.story.md"
+    story_status: "Ready"
+    priority: "P0"
+    branch: "feature/4.8-lotofacil-expanded-coverage-composition"
+  decisions:
+    - "Compor uma ou mais apostas-fonte Lotofácil usando os contratos 1.0 de expansão e cobertura sem alterá-los."
+    - "Calcular em preflight a soma de C(k,15) e preservar o teto existente de 1.000 ocorrências simples; 19-20 permanecem inelegíveis nesta composição."
+    - "Preservar ordem das fontes e ordem lexicográfica interna; ocorrências iguais entre fontes não são deduplicadas e permanecem visíveis como redundância."
+    - "Criar contrato reutilizável em lottery-contracts e orquestração genérica em coverage-engine; reutilizar adaptadores existentes; não criar skill ou package."
+    - "Manter a operação CLI transitória, com progresso/cancelamento/timeout da cobertura e sem rede, banco, custo/cotas, persistência, congelamento, impressão ou UI."
+  files_modified:
+    - "docs/prd.md"
+    - "docs/architecture/lotofacil-expanded-coverage-composition-contract.md"
+    - "docs/stories/4.8.lotofacil-expanded-coverage-composition.story.md"
+    - ".ai/story-validation-4.8.json"
+    - ".aiox/handoffs/2026-09-02-story-4.8-ready.yaml"
+  blockers: []
+  next_action: "Usar @dev *develop 4.8; implementar somente após consumir este handoff."
