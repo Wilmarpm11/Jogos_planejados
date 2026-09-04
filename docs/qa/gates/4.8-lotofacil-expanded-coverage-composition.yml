@@ -5,7 +5,7 @@ gate: PASS
 status_reason: 'O achado pós-publicação foi resolvido: o contrato de expansão 4.7 permanece compatível e a versão obrigatória ficou isolada na composição 4.8; AC 1–10 seguem cobertos sem achados remanescentes.'
 reviewer: 'Quinn (Test Architect)'
 reviewed_revision: '44de40a47b11f8c5def53f63a8869ed3b131ab6b'
-updated: '2026-09-04T13:59:52Z'
+updated: '2026-09-04T14:11:44Z'
 top_issues: []
 waiver:
   active: false
@@ -24,7 +24,7 @@ evidence:
     accepted: 1000
     rejected: 1001
   coderabbit_final_findings: 0
-  coderabbit_fix_commit: 'pending remote revalidation on PR #7'
+  coderabbit_fix_commit: 'PASS on PR #7 at cc2c0157c11f195e27db0883d7fc3099f8deb19b'
   compatibility_regression:
     legacy_adapter_without_version: PASS
     composition_adapter_version_required: PASS
