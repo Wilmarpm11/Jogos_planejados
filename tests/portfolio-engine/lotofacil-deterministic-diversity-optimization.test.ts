@@ -399,6 +399,30 @@ describe("deterministic greedy minimum-overlap selection", () => {
     });
   });
 
+  it("defines FIRST_CANONICAL as the first structurally eligible canonical candidate", async () => {
+    const candidates = generatedPool(50);
+    const eligibleCandidates = candidates
+      .filter((candidate) => lotofacilPortfolioDiversityOptimizationAdapter
+        .classifyStructuralGroup(candidate.numbers) === "ONE_EXTREME")
+      .sort((left, right) => lotofacilPortfolioDiversityOptimizationAdapter
+        .compareCandidates(left.numbers, right.numbers));
+    expect(eligibleCandidates).toHaveLength(2);
+
+    const result = await optimizePortfolioDiversity({
+      ...neutralRequest(candidates, 2),
+      structuralConstraint: {
+        mode: "PRESERVE_EXPLICIT_ALLOCATION",
+        allocation: structuralAllocation(0, 100, 0, 0, 0),
+      },
+    }, lotofacilPortfolioDiversityOptimizationAdapter);
+
+    expect(result.selectionOrder[0]).toMatchObject({
+      candidate: eligibleCandidates[0],
+      reason: "FIRST_CANONICAL",
+      winningIncrementalHistogram: null,
+    });
+  });
+
   it("rejects an infeasible explicit allocation before progress", async () => {
     const candidates = generateLotofacilPortfolio({
       lotteryDefinition: LOTOFACIL_DEFINITION,

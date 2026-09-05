@@ -191,8 +191,10 @@ O resultado registra, no mínimo:
 - carteira final em ordem lexicográfica;
 - `selectionOrder` discriminada por modo:
   - `GREEDY_SUBSET`, quando `1 < targetCandidateCount < poolSize`: o primeiro
-    item usa `winningIncrementalHistogram: null` e razão `FIRST_CANONICAL`; cada
-    passo posterior exige o histograma incremental vencedor, com exatamente os
+    item usa `winningIncrementalHistogram: null` e razão `FIRST_CANONICAL`;
+    essa razão significa o primeiro candidato canônico elegível — no modo
+    estrutural, faixas cuja quantidade final é zero são ignoradas. Cada passo
+    posterior exige o histograma incremental vencedor, com exatamente os
     buckets `betSize - 1` até `0`, contagem total igual ao número de candidatos
     previamente selecionados e soma ponderada igual à soma das interseções
     usadas naquele passo;
@@ -272,12 +274,13 @@ de timeout nem usa exit code `124`.
 
 ## Complexidade e memória
 
-Para pool `n`, alvo `t` e tamanho de aposta `k`, a matriz exige
-`C(n,2)` interseções e a seleção gulosa registra
-`(t - 1) × (2n - t) / 2` visitas a candidatos remanescentes. Como `t <= n` e `k` é limitado pela
-definição, o tempo permanece quadrático no teto aprovado. A matriz triangular
-deve usar representação numérica compacta e não duplicar a lista materializada
-de pares da auditoria 4.4.
+Para pool `n`, alvo `t` e tamanho de aposta `k`, somente o modo
+`GREEDY_SUBSET` (`1 < t < n`) constrói a matriz, com `C(n,2)` interseções, e
+registra `(t - 1) × (2n - t) / 2` visitas a candidatos remanescentes. Nos
+atalhos `t == 1` e `t == n`, matriz e seleção têm trabalho zero. Como `t <= n`
+e `k` é limitado pela definição, o tempo permanece quadrático no teto
+aprovado. A matriz triangular deve usar representação numérica compacta e não
+duplicar a lista materializada de pares da auditoria 4.4.
 
 O teto de 1.000 é fechado para `1.0`. O benchmark de pior caminho deve usar
 `poolSize = 1.000` e `targetCandidateCount = 999`, porque `target == pool` é um
