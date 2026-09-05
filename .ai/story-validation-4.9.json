@@ -1,0 +1,40 @@
+{
+  "story": "4.9",
+  "path": "docs/stories/4.9.lotofacil-deterministic-diversity-optimization.story.md",
+  "contractPath": "docs/architecture/portfolio-diversity-optimization-contract.md",
+  "validatedAt": "2026-09-04",
+  "validators": ["@architect", "@po"],
+  "architectureVerdict": "PASS",
+  "verdict": "GO",
+  "score": 9,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "executorAssignment": "PASS",
+    "requirementsTraceability": "PASS",
+    "architectureAlignment": "PASS",
+    "fileStructure": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "securityApplicability": "PASS",
+    "taskSequence": "PASS",
+    "codeRabbitIntegration": "PASS",
+    "antiHallucination": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "niceToHave": [],
+  "notes": [
+    "The product-approved algorithm is DETERMINISTIC_GREEDY_MIN_OVERLAP with descending incremental-overlap histogram comparison.",
+    "The three selection modes remove ambiguity for target=1 and target=pool shortcuts.",
+    "TypeScript execution is scoped to version 1.0; the general Tauri/TypeScript/Python contract remains pending.",
+    "FR-06, UI, persistence, generation of 16-20-number bets and Python IPC remain outside Story 4.9.",
+    "The public error enum is frozen to INVALID_PORTFOLIO_DIVERSITY_REQUEST, DUPLICATE_PORTFOLIO_DIVERSITY_CANDIDATE, INFEASIBLE_PORTFOLIO_DIVERSITY_ALLOCATION and PORTFOLIO_DIVERSITY_OPTIMIZATION_CANCELLED; their public class names and CLI exits are also normative.",
+    "CodeRabbit CLI 0.7.5 was verified with coderabbit doctor: 9 passed, 0 warnings, 0 failures. The story records the supported review command explicitly."
+  ]
+}

@@ -1,9 +1,9 @@
-# PRD v0.4 - Plataforma de Engenharia de Bolões
+# PRD v0.4.11 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
 **Modelo de licença:** GPL-3.0-or-later  
-**Última atualização:** 2026-09-02
+**Última atualização:** 2026-09-04
 
 ## Change log
 
@@ -20,6 +20,8 @@
 | 2026-09-02 | 0.4.7 | Gate da cobertura única: método exato 12+, teto de 1.000 jogos simples, timeout de 30 s e erro zero | Produto / Arquitetura |
 | 2026-09-02 | 0.4.8 | Primeira expansão canônica Lotofácil restrita a uma aposta de 15–20, materializada em combinações simples de 15 | Produto / Arquitetura |
 | 2026-09-02 | 0.4.9 | Composição transitória de várias apostas-fonte Lotofácil com expansão canônica e cobertura exata, preservando o teto de 1.000 ocorrências simples | Produto / Arquitetura |
+| 2026-09-04 | 0.4.10 | Reconciliação administrativa dos gates já comprovados de fórmula canônica e contratos CAIXA; massas estruturais 16–20 permanecem pendentes | PO / PM / Arquitetura |
+| 2026-09-04 | 0.4.11 | Regra de produto para custo/cotas: taxa percentual configurável, padrão 0%, base oficial sem dupla contagem e rateio auditável em centavos | Produto / PM |
 
 ## 1. Objetivo e contexto
 
@@ -209,9 +211,32 @@ expansão ou cobertura, nem persiste, congela, calcula custo/cotas ou cria UI.
 
 ### FR-06 - Bolão mínimo
 
-O usuário informa modalidade, concurso, tamanho de aposta e número inteiro de
-cotas. O relatório mostra custo total, regra/preço aplicado e custo por cota com
-regra de arredondamento declarada. Não existem pagamentos ou participantes no MVP.
+O usuário informa modalidade, concurso, a carteira efetivamente comprada, o
+número inteiro de cotas e, opcionalmente, uma taxa de serviço percentual
+configurável pelo operador. A taxa inicial segura é `0%`, que significa ausência
+de cobrança adicional. O valor de `30%` pode aparecer somente como exemplo de
+configuração; não é taxa oficial, obrigatória nem valor padrão do produto.
+
+A base de cálculo da taxa é o custo oficial total da carteira efetivamente
+comprada, obtido do catálogo CAIXA versionado aplicável. O cálculo declara qual
+representação contém os itens comprados e contabiliza essa base uma única vez:
+não é permitido cobrar simultaneamente pelas apostas-fonte e pelas combinações
+simples produzidas por sua expansão.
+
+Todos os valores monetários são representados em centavos inteiros. A taxa é
+aplicada uma única vez sobre o custo oficial total e seu valor total é
+arredondado para centavos. O total cobrado é a soma do custo oficial e da taxa
+arredondada. Esse total inteiro é então dividido pela quantidade de cotas; o
+resto em centavos é distribuído deterministicamente, um centavo adicional para
+cada uma das primeiras cotas em ordem canônica, até ser esgotado. A soma dos
+valores das cotas deve ser exatamente igual ao total cobrado.
+
+O resultado apresenta separadamente o custo oficial, o percentual configurado,
+o valor da taxa, o total cobrado e os valores das cotas. Também registra a base
+de cálculo utilizada, a regra de arredondamento e a regra de distribuição do
+resto. O cálculo é puro, determinístico e auditável. Pagamentos, integração
+financeira, venda de cotas e cadastro de participantes permanecem fora desta
+capacidade e do MVP.
 
 ### FR-07 - Relatório, aprovação e congelamento
 
@@ -534,16 +559,24 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
 
 ## 11. Gates antes de iniciar implementação de geração/impressão final
 
-- [ ] Congelar em artefato versionado todas as constantes, métricas e massas da
-  fórmula Lotofácil, incluindo semântica de pares consecutivos, sequências 2+,
-  moldura, ocupação normalizada de linhas/colunas, desvios e canonização/ordenação
-  de jogos.
+- [x] Congelar em artefato versionado a fórmula canônica vigente: definição
+  25/15, métricas e ocupação normalizada para 15–20, aplicabilidade versionada
+  de E1–E10, massa estrutural das apostas simples de 15 dezenas e
+  canonização/ordenação de jogos. Evidências:
+  `docs/architecture/lotofacil-canonical-formula.md`, Story 2.5,
+  `tests/lotofacil/canonical-formula-manifest.test.ts` e gate QA 2.5.
+- [ ] Calcular e versionar as massas e políticas estruturais próprias dos
+  universos de apostas 16–20 antes de habilitar sua geração automática; não
+  reutilizar a massa de 15 dezenas. Esta pendência preserva a restrição já
+  declarada na seção 7.3 e no manifesto canônico vigente.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
   simples, timeout de 30 s e erro zero, conforme
   `docs/architecture/lotofacil-exact-coverage-contract.md`.
-- [ ] Congelar URLs, campos, validações, versão do parser e regra de
-  correção/substituição da fonte CAIXA, com import manual.
+- [x] Congelar URLs, campos, validações, versão do parser e regra de
+  correção/substituição da fonte CAIXA, com import manual. Evidências: Stories
+  3.1–3.5, contratos de proveniência/snapshot, parsers versionados, testes de
+  importação/sincronização/fallback e respectivos gates QA.
 - [ ] Anexar PDF/foto/medidas finais do COLOGA ou ensaio equivalente.
 - [ ] Homologar template A4 em impressora/driver/papel/loteria de teste.
 - [ ] Definir o contrato entre interface TypeScript/Tauri e motor Python, incluindo

@@ -1,4 +1,8 @@
-import { binomialCoefficient } from "@boloes/combinatorics";
+import {
+  binomialCoefficient,
+  INTERSECTION_CARDINALITY_ALGORITHM_VERSION,
+  intersectionCardinality,
+} from "@boloes/combinatorics";
 import { z } from "zod";
 
 export const lotteryDefinitionSchema = z.object({
@@ -1489,4 +1493,459 @@ export interface StructuralMassProfile {
   readonly betSize: number;
   readonly totalOutcomes: number;
   readonly buckets: readonly StructuralMassBucket[];
+}
+
+export const PORTFOLIO_DIVERSITY_OPTIMIZATION_CONTRACT_VERSION = "1.0" as const;
+export const PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM =
+  "DETERMINISTIC_GREEDY_MIN_OVERLAP" as const;
+export const PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM_VERSION =
+  "deterministic-greedy-min-overlap/1.0.0" as const;
+export const PORTFOLIO_DIVERSITY_OPTIMIZATION_MIN_POOL_SIZE = 1;
+export const PORTFOLIO_DIVERSITY_OPTIMIZATION_MAX_POOL_SIZE = 1_000;
+
+export const portfolioDiversityOptimizationErrorCodeSchema = z.enum([
+  "INVALID_PORTFOLIO_DIVERSITY_REQUEST",
+  "DUPLICATE_PORTFOLIO_DIVERSITY_CANDIDATE",
+  "INFEASIBLE_PORTFOLIO_DIVERSITY_ALLOCATION",
+  "PORTFOLIO_DIVERSITY_OPTIMIZATION_CANCELLED",
+]);
+export type PortfolioDiversityOptimizationErrorCode = z.infer<
+  typeof portfolioDiversityOptimizationErrorCodeSchema
+>;
+
+const portfolioDiversityAllocationSchema = z.record(
+  z.string().min(1),
+  z.number().finite().min(0).max(100),
+).refine((allocation) => Object.keys(allocation).length > 0, {
+  message: "Structural allocation must contain at least one group.",
+}).refine(
+  (allocation) => Math.abs(
+    Object.values(allocation).reduce((sum, percent) => sum + percent, 0) - 100
+  ) <= 1e-9,
+  { message: "Structural allocation percentages must sum to 100." },
+);
+
+export const portfolioDiversityStructuralConstraintSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("NEUTRAL") }).strict(),
+  z.object({
+    mode: z.literal("PRESERVE_EXPLICIT_ALLOCATION"),
+    allocation: portfolioDiversityAllocationSchema,
+  }).strict(),
+]);
+export type PortfolioDiversityStructuralConstraint = z.infer<
+  typeof portfolioDiversityStructuralConstraintSchema
+>;
+
+/** Strict, bounded input for subset-only deterministic diversity optimization. */
+export const portfolioDiversityOptimizationRequestSchema = z.object({
+  contractVersion: z.literal(PORTFOLIO_DIVERSITY_OPTIMIZATION_CONTRACT_VERSION),
+  algorithm: z.literal(PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM),
+  lotteryDefinition: lotteryDefinitionSchema.strict(),
+  candidates: z.array(basicPortfolioAuditCandidateSchema)
+    .min(PORTFOLIO_DIVERSITY_OPTIMIZATION_MIN_POOL_SIZE)
+    .max(PORTFOLIO_DIVERSITY_OPTIMIZATION_MAX_POOL_SIZE),
+  targetCandidateCount: z.number().int().min(1),
+  structuralConstraint: portfolioDiversityStructuralConstraintSchema,
+}).strict().superRefine((request, context) => {
+  const definition = request.lotteryDefinition;
+  if (
+    definition.drawSize > definition.totalNumbers ||
+    definition.drawSize < definition.minBetSize ||
+    definition.drawSize > definition.maxBetSize ||
+    definition.minBetSize > definition.maxBetSize ||
+    definition.maxBetSize > definition.totalNumbers
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["lotteryDefinition"],
+      message: "Lottery dimensions and bet-size bounds must be ordered within the number universe.",
+    });
+  }
+  if (request.targetCandidateCount > request.candidates.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["targetCandidateCount"],
+      message: "targetCandidateCount cannot exceed the pool size.",
+    });
+  }
+  request.candidates.forEach((candidate, candidateIndex) => {
+    if (candidate.numbers.length !== definition.drawSize) {
+      context.addIssue({
+        code: "custom",
+        path: ["candidates", candidateIndex, "numbers"],
+        message: `Candidate must contain exactly ${definition.drawSize} numbers.`,
+      });
+    }
+    candidate.numbers.forEach((number, numberIndex) => {
+      if (number > definition.totalNumbers) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidates", candidateIndex, "numbers", numberIndex],
+          message: `Candidate number must be within 1-${definition.totalNumbers}.`,
+        });
+      }
+      if (numberIndex > 0 && number <= candidate.numbers[numberIndex - 1]!) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidates", candidateIndex, "numbers", numberIndex],
+          message: "Candidate numbers must be unique and in strictly ascending order.",
+        });
+      }
+    });
+  });
+});
+export type PortfolioDiversityOptimizationRequest = z.infer<
+  typeof portfolioDiversityOptimizationRequestSchema
+>;
+
+export const portfolioDiversityOptimizationProgressSchema = z.object({
+  phase: z.enum(["BUILD_OVERLAP_MATRIX", "SELECT_CANDIDATES"]),
+  processedWork: z.number().int().nonnegative(),
+  totalWork: z.number().int().nonnegative(),
+  percent: z.number().int().min(0).max(100),
+  overallProcessedWork: z.number().int().nonnegative(),
+  overallTotalWork: z.number().int().nonnegative(),
+  overallPercent: z.number().int().min(0).max(100),
+}).strict().superRefine((progress, context) => {
+  if (progress.processedWork > progress.totalWork) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Processed work cannot exceed total work." });
+  }
+  if (progress.overallProcessedWork > progress.overallTotalWork) {
+    context.addIssue({ code: "custom", path: ["overallProcessedWork"], message: "Overall processed work cannot exceed overall total work." });
+  }
+  const expectedPercent = progress.totalWork === 0
+    ? 100
+    : Math.floor((progress.processedWork * 100) / progress.totalWork);
+  if (progress.percent !== expectedPercent) {
+    context.addIssue({ code: "custom", path: ["percent"], message: "Phase percent must match processedWork/totalWork." });
+  }
+  const expectedOverallPercent = progress.overallTotalWork === 0
+    ? progress.phase === "SELECT_CANDIDATES" ? 100 : 0
+    : Math.floor((progress.overallProcessedWork * 100) / progress.overallTotalWork);
+  if (progress.overallPercent !== expectedOverallPercent) {
+    context.addIssue({ code: "custom", path: ["overallPercent"], message: "Overall percent must match overall processed work." });
+  }
+});
+export type PortfolioDiversityOptimizationProgress = z.infer<
+  typeof portfolioDiversityOptimizationProgressSchema
+>;
+
+export const portfolioDiversitySelectionModeSchema = z.enum([
+  "GREEDY_SUBSET",
+  "IDENTITY",
+  "LEXICOGRAPHIC_SINGLETON",
+]);
+export type PortfolioDiversitySelectionMode = z.infer<
+  typeof portfolioDiversitySelectionModeSchema
+>;
+
+const portfolioDiversityHistogramBucketSchema = z.object({
+  intersectionSize: z.number().int().nonnegative(),
+  count: z.number().int().nonnegative(),
+}).strict();
+
+const portfolioDiversitySelectionEntrySchema = z.object({
+  candidate: basicPortfolioAuditCandidateSchema,
+  provenance: z.object({
+    inputIndex: z.number().int().nonnegative(),
+    canonicalPoolIndex: z.number().int().nonnegative(),
+  }).strict(),
+  reason: z.enum([
+    "FIRST_CANONICAL",
+    "MIN_INCREMENTAL_OVERLAP",
+    "IDENTITY_SHORTCUT",
+    "SINGLE_TARGET",
+  ]),
+  winningIncrementalHistogram: z.array(portfolioDiversityHistogramBucketSchema).nullable(),
+}).strict();
+
+const portfolioDiversityStructuralResultSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("NEUTRAL") }).strict(),
+  z.object({
+    mode: z.literal("PRESERVE_EXPLICIT_ALLOCATION"),
+    groups: z.array(z.object({
+      group: z.string().min(1),
+      requestedPercent: z.number().finite().min(0).max(100),
+      targetCount: z.number().int().nonnegative(),
+      selectedCount: z.number().int().nonnegative(),
+    }).strict()).min(1),
+  }).strict(),
+]);
+
+const portfolioDiversityWorkPhaseSchema = z.object({
+  phase: z.enum(["BUILD_OVERLAP_MATRIX", "SELECT_CANDIDATES"]),
+  processedWork: z.number().int().nonnegative(),
+  totalWork: z.number().int().nonnegative(),
+}).strict();
+
+export const portfolioDiversityOptimizationResultSchema = z.object({
+  contractVersion: z.literal(PORTFOLIO_DIVERSITY_OPTIMIZATION_CONTRACT_VERSION),
+  algorithm: z.literal(PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM),
+  componentVersions: z.object({
+    algorithmVersion: z.literal(PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM_VERSION),
+    intersectionAlgorithmVersion: z.literal(INTERSECTION_CARDINALITY_ALGORITHM_VERSION),
+    adapterVersion: z.string().min(1),
+    candidateOrderingVersion: z.string().min(1),
+    structuralClassifierVersion: z.string().min(1).nullable(),
+    structuralAllocationAlgorithmVersion: z.string().min(1).nullable(),
+  }).strict(),
+  lottery: z.object({
+    id: z.string().min(1),
+    definitionVersion: z.string().min(1),
+    totalNumbers: z.number().int().positive(),
+  }).strict(),
+  betSize: z.number().int().positive(),
+  poolSize: z.number().int()
+    .min(PORTFOLIO_DIVERSITY_OPTIMIZATION_MIN_POOL_SIZE)
+    .max(PORTFOLIO_DIVERSITY_OPTIMIZATION_MAX_POOL_SIZE),
+  targetCandidateCount: z.number().int().positive(),
+  changed: z.boolean(),
+  selectionMode: portfolioDiversitySelectionModeSchema,
+  globallyOptimal: z.literal(false),
+  probabilityClaimed: z.literal(false),
+  timeoutApplied: z.literal(false),
+  candidates: z.array(basicPortfolioAuditCandidateSchema).min(1),
+  selectionOrder: z.array(portfolioDiversitySelectionEntrySchema).min(1),
+  structuralConstraint: portfolioDiversityStructuralResultSchema,
+  work: z.object({
+    phases: z.tuple([
+      portfolioDiversityWorkPhaseSchema.extend({ phase: z.literal("BUILD_OVERLAP_MATRIX") }),
+      portfolioDiversityWorkPhaseSchema.extend({ phase: z.literal("SELECT_CANDIDATES") }),
+    ]),
+    overallProcessedWork: z.number().int().nonnegative(),
+    overallTotalWork: z.number().int().nonnegative(),
+  }).strict(),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  coverageCalculated: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+}).strict().superRefine((result, context) => {
+  if (result.targetCandidateCount > result.poolSize) {
+    context.addIssue({ code: "custom", path: ["targetCandidateCount"], message: "Target cannot exceed pool size." });
+  }
+  if (
+    result.candidates.length !== result.targetCandidateCount ||
+    result.selectionOrder.length !== result.targetCandidateCount
+  ) {
+    context.addIssue({ code: "custom", path: ["candidates"], message: "Result collections must match targetCandidateCount." });
+  }
+
+  const candidateKey = (numbers: readonly number[]) => numbers.join(",");
+  const validateCanonicalResultCandidate = (
+    numbers: readonly number[],
+    path: (string | number)[],
+  ): void => {
+    if (numbers.length !== result.betSize) {
+      context.addIssue({ code: "custom", path, message: "Result candidates must match betSize." });
+    }
+    for (let index = 1; index < numbers.length; index += 1) {
+      if (numbers[index]! <= numbers[index - 1]!) {
+        context.addIssue({ code: "custom", path: [...path, index], message: "Result candidate numbers must be unique and canonical." });
+      }
+    }
+    numbers.forEach((number, index) => {
+      if (number > result.lottery.totalNumbers) {
+        context.addIssue({ code: "custom", path: [...path, index], message: "Result candidate number exceeds the lottery universe." });
+      }
+    });
+  };
+  result.candidates.forEach((candidate, index) => {
+    validateCanonicalResultCandidate(candidate.numbers, ["candidates", index, "numbers"]);
+  });
+  result.selectionOrder.forEach((entry, index) => {
+    validateCanonicalResultCandidate(
+      entry.candidate.numbers,
+      ["selectionOrder", index, "candidate", "numbers"],
+    );
+  });
+  const finalKeys = result.candidates.map((candidate) => candidateKey(candidate.numbers));
+  const selectionKeys = result.selectionOrder.map((entry) => candidateKey(entry.candidate.numbers));
+  if (
+    new Set(finalKeys).size !== finalKeys.length ||
+    new Set(selectionKeys).size !== selectionKeys.length ||
+    [...finalKeys].sort().join("|") !== [...selectionKeys].sort().join("|")
+  ) {
+    context.addIssue({ code: "custom", path: ["selectionOrder"], message: "Final candidates and selection order must contain the same unique portfolio." });
+  }
+  const canonicalPoolIndexes = result.selectionOrder.map(
+    (entry) => entry.provenance.canonicalPoolIndex,
+  );
+  const inputIndexes = result.selectionOrder.map((entry) => entry.provenance.inputIndex);
+  if (
+    new Set(canonicalPoolIndexes).size !== canonicalPoolIndexes.length ||
+    canonicalPoolIndexes.some((index) => index >= result.poolSize)
+  ) {
+    context.addIssue({ code: "custom", path: ["selectionOrder"], message: "Canonical provenance indexes must be unique and within the input pool." });
+  }
+  if (
+    new Set(inputIndexes).size !== inputIndexes.length ||
+    inputIndexes.some((index) => index >= result.poolSize)
+  ) {
+    context.addIssue({ code: "custom", path: ["selectionOrder"], message: "Input provenance indexes must be unique and within the input pool." });
+  }
+  const canonicalIndexByKey = new Map(
+    result.selectionOrder.map((entry) => [
+      candidateKey(entry.candidate.numbers),
+      entry.provenance.canonicalPoolIndex,
+    ]),
+  );
+  const finalCanonicalIndexes = finalKeys.map((key) => canonicalIndexByKey.get(key));
+  if (finalCanonicalIndexes.some((index) => index === undefined)) {
+    context.addIssue({ code: "custom", path: ["candidates"], message: "Every final candidate requires canonical provenance." });
+  } else {
+    for (let index = 1; index < finalCanonicalIndexes.length; index += 1) {
+      if (finalCanonicalIndexes[index]! <= finalCanonicalIndexes[index - 1]!) {
+        context.addIssue({ code: "custom", path: ["candidates", index], message: "Final candidates must follow canonical pool order." });
+      }
+    }
+  }
+
+  const identity = result.selectionMode === "IDENTITY";
+  const singleton = result.selectionMode === "LEXICOGRAPHIC_SINGLETON";
+  if (result.changed === identity || identity !== (result.targetCandidateCount === result.poolSize)) {
+    context.addIssue({ code: "custom", path: ["changed"], message: "IDENTITY must be the only unchanged selection mode." });
+  }
+  if (singleton !== (result.targetCandidateCount === 1 && result.poolSize > 1)) {
+    context.addIssue({ code: "custom", path: ["selectionMode"], message: "LEXICOGRAPHIC_SINGLETON requires target 1 below pool size." });
+  }
+  if (result.selectionMode === "GREEDY_SUBSET" && !(result.targetCandidateCount > 1 && result.targetCandidateCount < result.poolSize)) {
+    context.addIssue({ code: "custom", path: ["selectionMode"], message: "GREEDY_SUBSET requires 1 < target < pool size." });
+  }
+
+  result.selectionOrder.forEach((entry, index) => {
+    const histogram = entry.winningIncrementalHistogram;
+    const expectedReason = identity
+      ? "IDENTITY_SHORTCUT"
+      : singleton
+        ? "SINGLE_TARGET"
+        : index === 0 ? "FIRST_CANONICAL" : "MIN_INCREMENTAL_OVERLAP";
+    if (entry.reason !== expectedReason) {
+      context.addIssue({ code: "custom", path: ["selectionOrder", index, "reason"], message: "Selection reason does not match the selection mode and position." });
+    }
+    if (identity || singleton || index === 0) {
+      if (histogram !== null) {
+        context.addIssue({ code: "custom", path: ["selectionOrder", index, "winningIncrementalHistogram"], message: "Shortcut and first selections cannot fabricate histograms." });
+      }
+      return;
+    }
+    if (histogram === null || histogram.length !== result.betSize) {
+      context.addIssue({ code: "custom", path: ["selectionOrder", index, "winningIncrementalHistogram"], message: "Greedy selections require every descending overlap bucket." });
+      return;
+    }
+    histogram.forEach((bucket, bucketIndex) => {
+      if (bucket.intersectionSize !== result.betSize - 1 - bucketIndex) {
+        context.addIssue({ code: "custom", path: ["selectionOrder", index, "winningIncrementalHistogram", bucketIndex], message: "Overlap buckets must descend from betSize - 1 through zero." });
+      }
+    });
+    if (histogram.reduce((sum, bucket) => sum + bucket.count, 0) !== index) {
+      context.addIssue({ code: "custom", path: ["selectionOrder", index, "winningIncrementalHistogram"], message: "Incremental histogram count must equal the number of prior selections." });
+    }
+    const expectedHistogram = Array.from({ length: result.betSize }, () => 0);
+    for (let previousIndex = 0; previousIndex < index; previousIndex += 1) {
+      const overlap = intersectionCardinality(
+        entry.candidate.numbers,
+        result.selectionOrder[previousIndex]!.candidate.numbers,
+      );
+      const bucketIndex = result.betSize - 1 - overlap;
+      if (bucketIndex < 0 || bucketIndex >= expectedHistogram.length) {
+        context.addIssue({ code: "custom", path: ["selectionOrder", index, "candidate"], message: "Selected candidates must be distinct." });
+        continue;
+      }
+      expectedHistogram[bucketIndex]! += 1;
+    }
+    histogram.forEach((bucket, bucketIndex) => {
+      if (bucket.count !== expectedHistogram[bucketIndex]) {
+        context.addIssue({ code: "custom", path: ["selectionOrder", index, "winningIncrementalHistogram", bucketIndex, "count"], message: "Incremental histogram must match intersections with every prior selection." });
+      }
+    });
+  });
+
+  const [matrixWork, selectionWork] = result.work.phases;
+  const expectedMatrixWork = result.selectionMode === "GREEDY_SUBSET"
+    ? (result.poolSize * (result.poolSize - 1)) / 2
+    : 0;
+  const expectedSelectionWork = result.selectionMode === "GREEDY_SUBSET"
+    ? ((result.targetCandidateCount - 1) * (2 * result.poolSize - result.targetCandidateCount)) / 2
+    : 0;
+  if (
+    matrixWork.totalWork !== expectedMatrixWork ||
+    selectionWork.totalWork !== expectedSelectionWork ||
+    matrixWork.processedWork !== matrixWork.totalWork ||
+    selectionWork.processedWork !== selectionWork.totalWork
+  ) {
+    context.addIssue({ code: "custom", path: ["work", "phases"], message: "Completed phase totals must match the normative work formulas." });
+  }
+  const expectedOverallWork = matrixWork.totalWork + selectionWork.totalWork;
+  if (
+    result.work.overallTotalWork !== expectedOverallWork ||
+    result.work.overallProcessedWork !== expectedOverallWork
+  ) {
+    context.addIssue({ code: "custom", path: ["work"], message: "Overall work must equal the completed phase totals." });
+  }
+
+  if (result.structuralConstraint.mode === "NEUTRAL") {
+    if (
+      result.componentVersions.structuralClassifierVersion !== null ||
+      result.componentVersions.structuralAllocationAlgorithmVersion !== null
+    ) {
+      context.addIssue({ code: "custom", path: ["componentVersions"], message: "Neutral mode cannot report structural component versions." });
+    }
+  } else {
+    if (
+      result.componentVersions.structuralClassifierVersion === null ||
+      result.componentVersions.structuralAllocationAlgorithmVersion === null
+    ) {
+      context.addIssue({ code: "custom", path: ["componentVersions"], message: "Explicit structural mode requires structural component versions." });
+    }
+    const targetTotal = result.structuralConstraint.groups.reduce((sum, group) => sum + group.targetCount, 0);
+    const selectedTotal = result.structuralConstraint.groups.reduce((sum, group) => sum + group.selectedCount, 0);
+    const requestedPercentTotal = result.structuralConstraint.groups.reduce(
+      (sum, group) => sum + group.requestedPercent,
+      0,
+    );
+    const groups = result.structuralConstraint.groups.map((group) => group.group);
+    if (targetTotal !== result.targetCandidateCount || selectedTotal !== result.targetCandidateCount) {
+      context.addIssue({ code: "custom", path: ["structuralConstraint", "groups"], message: "Structural target and selected counts must equal targetCandidateCount." });
+    }
+    if (
+      Math.abs(requestedPercentTotal - 100) > 1e-9 ||
+      new Set(groups).size !== groups.length
+    ) {
+      context.addIssue({ code: "custom", path: ["structuralConstraint", "groups"], message: "Structural groups must be unique and percentages must sum to 100." });
+    }
+    result.structuralConstraint.groups.forEach((group, index) => {
+      if (group.targetCount !== group.selectedCount) {
+        context.addIssue({ code: "custom", path: ["structuralConstraint", "groups", index], message: "Every structural target must be preserved exactly." });
+      }
+    });
+  }
+});
+export type PortfolioDiversityOptimizationResult = z.infer<
+  typeof portfolioDiversityOptimizationResultSchema
+>;
+
+export interface PortfolioDiversityStructuralTarget {
+  readonly group: string;
+  readonly requestedPercent: number;
+  readonly targetCount: number;
+}
+
+/** Lottery-owned behavior injected into the modality-neutral optimizer. */
+export interface PortfolioDiversityOptimizationAdapter {
+  readonly lotteryId: string;
+  readonly adapterVersion: string;
+  readonly betSize: number;
+  readonly candidateOrderingVersion: string;
+  readonly structuralClassifierVersion: string;
+  readonly structuralAllocationAlgorithmVersion: string;
+  supportsDefinition(definition: LotteryDefinition): boolean;
+  validateCandidate(numbers: readonly number[]): void;
+  canonicalKey(numbers: readonly number[]): string;
+  compareCandidates(left: readonly number[], right: readonly number[]): number;
+  classifyStructuralGroup(numbers: readonly number[]): string;
+  resolveStructuralTargets(
+    allocation: Readonly<Record<string, number>>,
+    targetCandidateCount: number,
+  ): readonly PortfolioDiversityStructuralTarget[];
 }

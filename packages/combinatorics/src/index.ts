@@ -2,6 +2,39 @@ export type CombinationVisitor = (combination: readonly number[]) => void;
 
 export type CombinationRanker = (combination: readonly number[]) => number;
 
+export const INTERSECTION_CARDINALITY_ALGORITHM_VERSION =
+  "intersection-cardinality/1.0.0" as const;
+
+/**
+ * Counts the intersection of two strictly increasing canonical sequences in
+ * linear time. Validation belongs to the caller's boundary so hot paths can
+ * reuse this primitive without repeated allocation or normalization.
+ */
+export function intersectionCardinality(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let cardinality = 0;
+
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftValue = left[leftIndex]!;
+    const rightValue = right[rightIndex]!;
+    if (leftValue === rightValue) {
+      cardinality += 1;
+      leftIndex += 1;
+      rightIndex += 1;
+    } else if (leftValue < rightValue) {
+      leftIndex += 1;
+    } else {
+      rightIndex += 1;
+    }
+  }
+
+  return cardinality;
+}
+
 /** Returns C(n, k) exactly while the result remains a safe integer. */
 export function binomialCoefficient(totalItems: number, selectionSize: number): number {
   if (!Number.isInteger(totalItems) || totalItems < 0) {
