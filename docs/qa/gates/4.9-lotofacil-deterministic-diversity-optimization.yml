@@ -1,0 +1,69 @@
+schema: 1
+story: '4.9'
+story_title: 'Otimização determinística de diversidade da carteira Lotofácil'
+gate: PASS
+status_reason: 'Os AC 1–12 estão integralmente cobertos; algoritmo, limites, alocação estrutural, observabilidade e compatibilidade 4.2–4.8 foram verificados sem achados remanescentes.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: '12c664675955743d929b10c83049fda442e16c52'
+implementation_revision: '4dca6307943486d90320e12ba73e3161b71f2682'
+updated: '2026-09-05T12:55:48Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-19T12:55:48Z'
+evidence:
+  tests_reviewed: 20
+  focused_tests_passed: 29
+  regression_tests_passed: 194
+  test_files_passed: 24
+  checks:
+    - 'npm run lint'
+    - 'npm run typecheck'
+    - 'npm test'
+    - 'Story 4.9 + auditoria 4.4 focadas'
+    - 'npm ls @boloes/portfolio-engine @boloes/combinatorics --all'
+    - 'git diff --check'
+    - 'CodeRabbit committed --base main'
+    - 'revisão AIOX Architect'
+    - 'revisão AIOX QA independente'
+  benchmark:
+    pool_size: 1000
+    target_candidate_count: 999
+    total_work: 998999
+    observed_duration_ms: 149.88
+    maximum_resident_set_bytes: 124157952
+    sla_claimed: false
+  coderabbit:
+    status: PASS
+    final_findings: 0
+    resolved_minor_findings: 3
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    ac_gaps: []
+risk_summary:
+  totals:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 4
+  highest_score: 3
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Schemas estritos e execução local, sem rede, banco, credenciais ou persistência.'
+  performance:
+    status: PASS
+    notes: 'Teto de 1.000, matriz triangular compacta e benchmark 1.000/999 concluído com 998.999 unidades.'
+  reliability:
+    status: PASS
+    notes: 'Preflight, progresso, cancelamento cooperativo e SIGINT/130 foram verificados sem resultado parcial.'
+  maintainability:
+    status: PASS
+    notes: 'Contrato neutro, adaptador Lotofácil, primitiva compartilhada e regressão 4.2–4.8 preservam responsabilidades.'
+recommendations:
+  immediate: []
+  future:
+    - action: 'Exigir nova decisão versionada e benchmark antes de elevar o teto ou adicionar modalidades/tamanhos.'
+      refs:
+        - 'docs/architecture/portfolio-diversity-optimization-contract.md'
