@@ -164,25 +164,152 @@ describe("Story 4.9 public contracts", () => {
       .toBe(false);
   });
 
-  it("validates zero-work and regular progress semantics", () => {
-    expect(portfolioDiversityOptimizationProgressSchema.parse({
-      phase: "BUILD_OVERLAP_MATRIX",
-      processedWork: 0,
-      totalWork: 0,
-      percent: 100,
-      overallProcessedWork: 0,
-      overallTotalWork: 0,
-      overallPercent: 0,
-    })).toBeTruthy();
-    expect(portfolioDiversityOptimizationProgressSchema.safeParse({
-      phase: "SELECT_CANDIDATES",
-      processedWork: 1,
-      totalWork: 2,
-      percent: 51,
-      overallProcessedWork: 7,
-      overallTotalWork: 8,
-      overallPercent: 87,
-    }).success).toBe(false);
+  it("accepts coherent initial, boundary, final, and zero-work progress", () => {
+    const validProgress = [
+      {
+        phase: "BUILD_OVERLAP_MATRIX",
+        processedWork: 0,
+        totalWork: 6,
+        percent: 0,
+        overallProcessedWork: 0,
+        overallTotalWork: 11,
+        overallPercent: 0,
+      },
+      {
+        phase: "BUILD_OVERLAP_MATRIX",
+        processedWork: 6,
+        totalWork: 6,
+        percent: 100,
+        overallProcessedWork: 6,
+        overallTotalWork: 11,
+        overallPercent: 54,
+      },
+      {
+        phase: "SELECT_CANDIDATES",
+        processedWork: 0,
+        totalWork: 5,
+        percent: 0,
+        overallProcessedWork: 6,
+        overallTotalWork: 11,
+        overallPercent: 54,
+      },
+      {
+        phase: "SELECT_CANDIDATES",
+        processedWork: 5,
+        totalWork: 5,
+        percent: 100,
+        overallProcessedWork: 11,
+        overallTotalWork: 11,
+        overallPercent: 100,
+      },
+      {
+        phase: "BUILD_OVERLAP_MATRIX",
+        processedWork: 0,
+        totalWork: 0,
+        percent: 100,
+        overallProcessedWork: 0,
+        overallTotalWork: 0,
+        overallPercent: 0,
+      },
+      {
+        phase: "SELECT_CANDIDATES",
+        processedWork: 0,
+        totalWork: 0,
+        percent: 100,
+        overallProcessedWork: 0,
+        overallTotalWork: 0,
+        overallPercent: 100,
+      },
+    ] as const;
+
+    for (const progress of validProgress) {
+      expect(portfolioDiversityOptimizationProgressSchema.safeParse(progress).success).toBe(true);
+    }
+  });
+
+  it("rejects progress whose phase counters cannot fit within global work", () => {
+    const invalidProgress = [
+      {
+        expectedMessage: "Processed work cannot exceed total work.",
+        progress: {
+          phase: "SELECT_CANDIDATES",
+          processedWork: 2,
+          totalWork: 1,
+          percent: 100,
+          overallProcessedWork: 2,
+          overallTotalWork: 10,
+          overallPercent: 20,
+        },
+      },
+      {
+        expectedMessage: "Overall processed work cannot exceed overall total work.",
+        progress: {
+          phase: "SELECT_CANDIDATES",
+          processedWork: 1,
+          totalWork: 1,
+          percent: 100,
+          overallProcessedWork: 2,
+          overallTotalWork: 1,
+          overallPercent: 100,
+        },
+      },
+      {
+        expectedMessage: "Phase processed work cannot exceed overall processed work.",
+        progress: {
+          phase: "SELECT_CANDIDATES",
+          processedWork: 2,
+          totalWork: 4,
+          percent: 50,
+          overallProcessedWork: 1,
+          overallTotalWork: 10,
+          overallPercent: 10,
+        },
+      },
+      {
+        expectedMessage: "Phase total work cannot exceed overall total work.",
+        progress: {
+          phase: "BUILD_OVERLAP_MATRIX",
+          processedWork: 0,
+          totalWork: 11,
+          percent: 0,
+          overallProcessedWork: 0,
+          overallTotalWork: 10,
+          overallPercent: 0,
+        },
+      },
+      {
+        expectedMessage: "Phase remaining work cannot exceed overall remaining work.",
+        progress: {
+          phase: "SELECT_CANDIDATES",
+          processedWork: 2,
+          totalWork: 6,
+          percent: 33,
+          overallProcessedWork: 8,
+          overallTotalWork: 11,
+          overallPercent: 72,
+        },
+      },
+      {
+        expectedMessage: "Phase percent must match processedWork/totalWork.",
+        progress: {
+          phase: "SELECT_CANDIDATES",
+          processedWork: 1,
+          totalWork: 2,
+          percent: 51,
+          overallProcessedWork: 7,
+          overallTotalWork: 8,
+          overallPercent: 87,
+        },
+      },
+    ] as const;
+
+    for (const { progress, expectedMessage } of invalidProgress) {
+      const parsed = portfolioDiversityOptimizationProgressSchema.safeParse(progress);
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.map((issue) => issue.message)).toContain(expectedMessage);
+      }
+    }
   });
 
   it("exposes the single shared linear intersection primitive", () => {

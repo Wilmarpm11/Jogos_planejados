@@ -1613,6 +1613,20 @@ export const portfolioDiversityOptimizationProgressSchema = z.object({
   if (progress.overallProcessedWork > progress.overallTotalWork) {
     context.addIssue({ code: "custom", path: ["overallProcessedWork"], message: "Overall processed work cannot exceed overall total work." });
   }
+  if (progress.processedWork > progress.overallProcessedWork) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Phase processed work cannot exceed overall processed work." });
+  }
+  if (progress.totalWork > progress.overallTotalWork) {
+    context.addIssue({ code: "custom", path: ["totalWork"], message: "Phase total work cannot exceed overall total work." });
+  }
+  if (
+    progress.processedWork <= progress.totalWork &&
+    progress.overallProcessedWork <= progress.overallTotalWork &&
+    progress.totalWork - progress.processedWork >
+      progress.overallTotalWork - progress.overallProcessedWork
+  ) {
+    context.addIssue({ code: "custom", path: ["processedWork"], message: "Phase remaining work cannot exceed overall remaining work." });
+  }
   const expectedPercent = progress.totalWork === 0
     ? 100
     : Math.floor((progress.processedWork * 100) / progress.totalWork);
