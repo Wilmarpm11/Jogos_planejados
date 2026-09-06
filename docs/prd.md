@@ -515,8 +515,11 @@ versão dos limites e não expressa chance de prêmio.
 
 Cada tamanho de 15 a 20 possui massa teórica própria, obtida por enumeração
 integral de `C(25, betSize)`, sem amostragem, histórico ou download. A tabela
-vigente abaixo permanece a referência canônica de 15; ela nunca é transferida
-para 16–20.
+abaixo é somente uma apresentação arredondada dos valores atuais de 15 e não é
+a fonte canônica. A fonte canônica é `LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT`, que
+registra contagens inteiras e frações exatas `count/universeSize`. Os valores e
+percentuais apresentados permanecem inalterados e não são recalculados nesta
+correção; a massa de 15 nunca é transferida para 16–20.
 
 | Faixa | Massa teórica |
 | --- | ---: |
