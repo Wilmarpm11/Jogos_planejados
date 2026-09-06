@@ -36,7 +36,7 @@ participante, persiste, aprova, congela ou imprime carteira.
 | Request, resultado, erros, versões e interface de adaptação | **Criar contrato reutilizável** em `@boloes/lottery-contracts` | O Core não recebe constantes CAIXA ou Lotofácil implícitas. |
 | Cálculo monetário e rateio | **Criar capacidade pura no package existente** `@boloes/portfolio-engine` | Aritmética inteira; sem catálogo, modalidade, banco ou UI dentro da primitiva. |
 | Catálogo e proveniência | **Reutilizar** `LotofacilCatalogRecord` da Story 3.5 | Não duplicar parser, preço, snapshot ou persistência. |
-| Canonização das apostas | **Reutilizar** validação e ordem canônica Lotofácil existentes | Duplicatas entre ocorrências continuam legítimas e não são deduplicadas. |
+| Canonização das apostas | **Reutilizar** validação e chave canônica Lotofácil existentes; restringir a ordenação da saída 4.10 à comparação bytewise abaixo | Duplicatas entre ocorrências continuam legítimas e não são deduplicadas. |
 | Preço e limites por modalidade | **Restringir** ao adaptador `@boloes/lottery-lotofacil` | Outra modalidade precisa de catálogo e adaptador próprios. |
 | CLI | **Reutilizar** a entrada local por arquivo e a separação de streams | Nenhuma UI ou IPC Python nesta story. |
 | Skill AIOX dedicada | **Não criar** | O contrato executável, os adaptadores e testes são a fonte de verdade; não há workflow de agente reutilizável a extrair. |
@@ -55,11 +55,25 @@ participante, persiste, aprova, congela ou imprime carteira.
 - `quotaDivisionRule`: `INTEGER_FLOOR_THEN_ASCENDING_QUOTA_ID_REMAINDER`.
 - `purchasedBaseType`: `SOURCE_BETS | EXPANDED_SIMPLE_BETS`.
 - `candidateOrderingVersion`:
-  `locale-compare-of-comma-joined-canonical-games/1.0.0`.
+  `ascii-bytewise-of-comma-joined-canonical-games/1.0.0`.
+
+Essa versão se aplica somente à normalização de `purchasedBase.bets` da Story
+4.10. Ela não altera o comparador, a constante ou os resultados mergeados da
+Story 4.9.
+
+Cada aposta já validada é convertida sem zero-padding para
+`numbers.join(",")`. A chave contém somente os bytes ASCII `0x2C` e
+`0x30..0x39`. Duas chaves são comparadas lexicograficamente pelos bytes UTF-8
+sem sinal: vence o primeiro byte diferente; se uma chave for prefixo da outra,
+a menor vence. Chaves iguais representam a mesma sequência; ocorrências
+duplicadas preservam multiplicidade. `localeCompare`, `Intl.Collator` e locale
+de ambiente são proibidos nessa ordenação.
 
 Alterar escala/precisão do percentual, intervalo, arredondamento, incidência,
-semântica da base, tratamento de duplicatas, ordem das cotas ou aplicação dos
-limites CAIXA exige nova versão do contrato/algoritmo e vetores de regressão.
+semântica da base, tratamento de duplicatas, ordenação das apostas, ordem das
+cotas ou aplicação dos limites CAIXA exige nova versão aplicável e vetores de
+regressão. Mudança da chave ou comparação exige nova
+`candidateOrderingVersion`.
 
 ## 4. Request público estrito
 
@@ -275,7 +289,7 @@ type LotofacilOperationalCostAndQuotasResultV1 = {
     occurrenceCount: number;
     unitPriceCents: number;
     candidateOrderingVersion:
-      "locale-compare-of-comma-joined-canonical-games/1.0.0";
+      "ascii-bytewise-of-comma-joined-canonical-games/1.0.0";
     bets: readonly { numbers: readonly number[] }[];
   };
   officialCostCents: number;
@@ -443,6 +457,10 @@ arredondamento ou rateio no frontend.
 - duplicatas em ambos os ramos permanecem no resultado e aumentam custo por
   ocorrência;
 - permutar apostas não altera base canônica, custo ou totais;
+- vetores de ordenação ASCII cobrem `1,2,...,15` versus `10,...,24`, prefixos,
+  chaves iguais com multiplicidade e execução sob locales distintos; a saída
+  4.10 e `candidateOrderingVersion` permanecem idênticas, sem alterar fixtures
+  ou o comparador da Story 4.9;
 - ausência de qualquer soma entre os ramos e ausência de expansão implícita.
 
 ### 11.3 Percentual e HALF_UP

@@ -221,6 +221,8 @@ Falha de qualquer invariante impede a publicação de todos os artefatos.
 ```text
 contractVersion          = "1.0"
 artifactSchemaVersion    = "1.0.0"
+canonicalSerializationVersion =
+  "lotofacil-structural-canonical-json/1.0.0"
 policySetId              = "lotofacil-structural-policy"
 policySetVersion         = "1.0.0"
 policyId                 = "lotofacil-structural-policy/{betSize}"
@@ -265,15 +267,46 @@ Mistura de `betSize`, política, classificador, manifesto ou versão de algoritm
   política consumidora;
 - mudança de limite, operador, desempate, núcleo ou composição de
   `extreme_count` exige nova versão da política e do classificador;
-- mudança apenas do cálculo/serialização da massa exige nova versão do algoritmo
-  ou schema, sem reclassificar silenciosamente artefatos antigos;
+- mudança de cálculo da massa exige nova versão do algoritmo ou schema;
+- qualquer mudança que altere os bytes canônicos exige novas versões de
+  `canonicalSerializationVersion` e `artifactSchemaVersion`, novas fixtures e
+  novos hashes, sem reinterpretar ou recalcular silenciosamente artefatos
+  antigos;
 - mudança de `betSize` sempre possui `policyId` e massa distintos;
 - artefatos antigos permanecem identificáveis e nunca são recalculados sob uma
   versão nova sem produzir uma nova identidade/hash.
 
 ## 11. Serialização e hash determinísticos
 
-O objeto canônico fixa a ordem das propriedades pelo schema e usa:
+O perfil `lotofacil-structural-canonical-json/1.0.0` aceita somente `null`,
+booleanos, strings Unicode válidas, inteiros permitidos pelo schema, arrays e
+objetos estritos.
+
+- chaves de todo objeto, inclusive objetos aninhados, são ordenadas pela
+  sequência de bytes UTF-8 sem sinal da chave Unicode não escapada;
+- arrays preservam a ordem definida pelo domínio e nunca são reordenados pelo
+  serializador;
+- strings escapam `"` como `\"`, `\` como `\\`, e os controles
+  `U+0008`, `U+000C`, `U+000A`, `U+000D` e `U+0009` como
+  `\b`, `\f`, `\n`, `\r` e `\t`; os demais caracteres `U+0000..U+001F`
+  usam `\u00xx` hexadecimal minúsculo;
+- os demais valores escalares Unicode são emitidos diretamente em UTF-8;
+  surrogate isolado é inválido;
+- A serialização não normaliza Unicode; preserva exatamente a sequência de
+  valores escalares validada pelo schema. Identificadores normativos são
+  restringidos pelo respectivo schema, preferencialmente a ASCII;
+- inteiros usam base decimal ASCII, sem `+`, zeros à esquerda ou notação
+  exponencial; `0` é a única representação de zero;
+- `NaN`, `Infinity`, `-Infinity`, `-0`, números fracionários e `undefined`
+  são proibidos;
+- `ExactFraction` usa `{ denominator, numerator }`, ambos inteiros,
+  `denominator > 0`, `numerator >= 0`, razão reduzida por MDC e zero somente
+  como `0/1`; representação não canônica é rejeitada;
+- `null` é emitido como `null` somente quando o schema o permite;
+- campo opcional ausente é omitido; presença com `undefined` é inválida;
+- não há BOM, whitespace, indentação ou quebra de linha fora de strings.
+
+Antes da serialização genérica, as coleções de domínio usam:
 
 - `betSize` em ordem crescente;
 - regras `E1` a `E10`;
@@ -282,13 +315,24 @@ O objeto canônico fixa a ordem das propriedades pelo schema e usa:
 - critérios do núcleo na ordem da seção 8;
 - cruzamento por faixa e depois `false`, `true`.
 
-Os bytes são UTF-8 de JSON compacto, sem espaços e sem `artifactHash`. Não há
+O perfil acima, e não `JSON.stringify` isoladamente, é a definição normativa.
+Os bytes são UTF-8 do JSON canônico, sem `artifactHash`. Não há
 timestamp, duração, percentual de apresentação ou dado de ambiente no payload.
 O hash é SHA-256 em hexadecimal minúsculo, representado como `sha256:<hex>`.
 Política, massa e índice do conjunto possuem hashes próprios.
 
-Fixtures canônicas congelam os bytes e hashes; duas execuções com as mesmas
-versões devem produzir bytes idênticos.
+Fixtures normativas mínimas:
+
+1. `{"fraction":{"denominator":2,"numerator":1}}`
+   possui 44 bytes UTF-8 e SHA-256
+   `sha256:7569c6b59b86ed222bbe8829d54ac1db9f9d3c684f92c422169c34c60525e262`.
+2. `{"a":[null,"linha\n\"\\",{"frequency":{"denominator":2,"numerator":1}}],"label":"Lotofácil","z":0}`
+   possui 99 bytes UTF-8 e SHA-256
+   `sha256:dab0cbac6cb7e2ae4f7ac477976fb942626cbcf2b523f2ecb1de4739f064e012`.
+
+A implementação também congela ao menos uma política, uma massa e um índice
+completos por versão, preservando seus bytes UTF-8 e SHA-256 esperados. Duas
+execuções com as mesmas versões devem produzir bytes idênticos.
 
 ## 12. Manifesto canônico
 
