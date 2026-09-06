@@ -1,9 +1,9 @@
-# PRD v0.4.11 - Plataforma de Engenharia de Bolões
+# PRD v0.4.13 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
 **Modelo de licença:** GPL-3.0-or-later  
-**Última atualização:** 2026-09-04
+**Última atualização:** 2026-09-05
 
 ## Change log
 
@@ -22,6 +22,8 @@
 | 2026-09-02 | 0.4.9 | Composição transitória de várias apostas-fonte Lotofácil com expansão canônica e cobertura exata, preservando o teto de 1.000 ocorrências simples | Produto / Arquitetura |
 | 2026-09-04 | 0.4.10 | Reconciliação administrativa dos gates já comprovados de fórmula canônica e contratos CAIXA; massas estruturais 16–20 permanecem pendentes | PO / PM / Arquitetura |
 | 2026-09-04 | 0.4.11 | Regra de produto para custo/cotas: taxa percentual configurável, padrão 0%, base oficial sem dupla contagem e rateio auditável em centavos | Produto / PM |
+| 2026-09-05 | 0.4.12 | Contrato P0 de custo/cotas fechado: taxa em basis points, HALF_UP, quotaId numérico, base homogênea discriminada e limites de cotas do catálogo | Produto / PO / Arquitetura |
+| 2026-09-05 | 0.4.13 | Política estrutural 16–20 fechada: métricas preservadas, limites por cauda exata, E9/E10 normalizados, faixas/núcleo próprios e enumeração integral | Produto / Análise / PO / Arquitetura |
 
 ## 1. Objetivo e contexto
 
@@ -146,9 +148,12 @@ universo abandonado no relatório.
 
 ### FR-04.1 - Modos de estratégia e comparação pré-geração
 
-O produto suporta `NEUTRAL`, `ADVANCED` e `MANUAL_EXPERIMENTAL`. O modo neutro
-preserva a distribuição estrutural neutra e nunca é enviesado automaticamente
-por coorte. Em `ADVANCED`, o usuário pode escolher uma distribuição estrutural
+O produto suporta `NEUTRAL`, `ADVANCED` e `MANUAL_EXPERIMENTAL`. No modo
+neutro, a geração não impõe cotas estruturais. A massa teórica é referência de
+auditoria da distribuição observada, não uma alocação obrigatória. Somente uma
+estratégia com alocação estrutural explícita impõe percentuais por faixa. O
+modo neutro nunca é enviesado automaticamente por coorte. Em `ADVANCED`, o
+usuário pode escolher uma distribuição estrutural
 explícita que some 100%, uma coorte de contexto opcional e restrições suportadas
 pela modalidade/tamanho de aposta. A coorte é apenas contexto de análise: ela
 não cria padrão, recomendação ou viés automático.
@@ -211,9 +216,10 @@ expansão ou cobertura, nem persiste, congela, calcula custo/cotas ou cria UI.
 
 ### FR-06 - Bolão mínimo
 
-O usuário informa modalidade, concurso, a carteira efetivamente comprada, o
-número inteiro de cotas e, opcionalmente, uma taxa de serviço percentual
-configurável pelo operador. A taxa inicial segura é `0%`, que significa ausência
+O usuário informa modalidade, concurso, a carteira efetivamente comprada, os
+`quotaId` e, opcionalmente, uma taxa de serviço percentual configurável pelo
+operador. A taxa usa basis points inteiros entre `0` e `10.000`, inclusive:
+`100` representa `1,00%`. A taxa inicial segura é `0%`, que significa ausência
 de cobrança adicional. O valor de `30%` pode aparecer somente como exemplo de
 configuração; não é taxa oficial, obrigatória nem valor padrão do produto.
 
@@ -221,22 +227,38 @@ A base de cálculo da taxa é o custo oficial total da carteira efetivamente
 comprada, obtido do catálogo CAIXA versionado aplicável. O cálculo declara qual
 representação contém os itens comprados e contabiliza essa base uma única vez:
 não é permitido cobrar simultaneamente pelas apostas-fonte e pelas combinações
-simples produzidas por sua expansão.
+simples produzidas por sua expansão. A versão P0 aceita exatamente uma base
+homogênea por tamanho: `SOURCE_BETS`, precificada pelo tamanho de cada
+aposta-fonte de 15–20 dezenas, ou `EXPANDED_SIMPLE_BETS`, precificada sempre
+como aposta simples de 15 dezenas. Cada ocorrência representa uma compra;
+duplicatas legítimas são preservadas e cobradas, nunca deduplicadas
+silenciosamente.
 
-Todos os valores monetários são representados em centavos inteiros. A taxa é
-aplicada uma única vez sobre o custo oficial total e seu valor total é
-arredondado para centavos. O total cobrado é a soma do custo oficial e da taxa
-arredondada. Esse total inteiro é então dividido pela quantidade de cotas; o
-resto em centavos é distribuído deterministicamente, um centavo adicional para
-cada uma das primeiras cotas em ordem canônica, até ser esgotado. A soma dos
-valores das cotas deve ser exatamente igual ao total cobrado.
+O chamador fornece o registro de catálogo já resolvido como aplicável. O motor
+valida modalidade, integridade e proveniência e registra a identidade usada,
+mas não decide vigência por concurso. A quantidade de cotas é derivada da lista
+de `quotaId` e respeita `minShares`/`maxShares` do catálogo para o tamanho
+homogêneo da base. `maxGamesPerReceipt` não é validado nesta capacidade, que não
+modela recibos.
 
-O resultado apresenta separadamente o custo oficial, o percentual configurado,
-o valor da taxa, o total cobrado e os valores das cotas. Também registra a base
-de cálculo utilizada, a regra de arredondamento e a regra de distribuição do
-resto. O cálculo é puro, determinístico e auditável. Pagamentos, integração
-financeira, venda de cotas e cadastro de participantes permanecem fora desta
-capacidade e do MVP.
+Todos os valores monetários e cálculos são inteiros. A taxa é aplicada uma única
+vez sobre o custo oficial total conforme
+`feeCents = HALF_UP(officialCostCents × feeBps / 10000)`, com empate de meio
+centavo arredondado para cima. Então
+`totalCents = officialCostCents + feeCents`. O valor-base de cada cota é
+`floor(totalCents / quotaCount)`; o resto inteiro é distribuído, um centavo por
+cota, pela ordem numérica crescente de `quotaId` até ser esgotado. Cada
+`quotaId` é fornecido no request como inteiro positivo, único e estável; gaps
+são permitidos e `quotaCount` deriva da quantidade de IDs. Se qualquer cota
+resultar em `R$ 0,00`, o request é rejeitado. A soma dos valores das cotas deve
+ser exatamente igual a `totalCents`.
+
+O resultado apresenta separadamente `officialCostCents`, `feeBps`, `feeCents`,
+`totalCents`, o valor-base, o resto e o valor final de cada `quotaId`. Também
+registra a base de cálculo, a regra `HALF_UP`, a regra de distribuição do resto,
+a identidade/proveniência do catálogo e as versões contratuais. O cálculo é
+puro, determinístico e auditável. Pagamentos, integração financeira, venda de
+cotas e cadastro de participantes permanecem fora desta capacidade e do MVP.
 
 ### FR-07 - Relatório, aprovação e congelamento
 
@@ -419,6 +441,14 @@ auxiliary_constraints:
 
 No modo neutro, columns e rows são nulos.
 
+As distribuições de `columns_with_0`, `columns_with_1`, `rows_with_0` e
+`rows_with_1` já existem para todos os tamanhos de 15 a 20 e permanecem sinais
+auxiliares auditáveis. Elas não entram em E1–E10, `extreme_count`, faixas,
+núcleo ou geração P0. As distribuições `row_deviation_normalized` e
+`column_deviation_normalized` são reutilizadas exclusivamente por E9 e E10,
+respectivamente, conforme a seção 7.2. A política auxiliar operacional
+específica de 15 não é transferida para outros tamanhos.
+
 #### Baseline auxiliar de auditoria para cartelas simples de 15
 
 Além da raridade teórica configurável, a Lotofácil mantém uma política auxiliar
@@ -453,20 +483,43 @@ base analisada. Esses percentuais não são transferidos para apostas 16–20.
 | E6 | maior sequência <=2 ou >=9 |
 | E7 | sequências <=1 ou >=7 |
 | E8 | amplitude <=18 |
-| E9 | para 15: desvio de linhas >=8; para 16–20: não aplicável até estudo teórico específico |
-| E10 | para 15: desvio de colunas >=8; para 16–20: não aplicável até estudo teórico específico |
+| E9 | para 15: desvio de linhas >=8; para 16–20: limite próprio sobre o desvio normalizado |
+| E10 | para 15: desvio de colunas >=8; para 16–20: limite próprio sobre o desvio normalizado |
 
 Para apostas de 15 dezenas, a referência histórica de desvio absoluto pode ser
 mantida somente como âncora equivalente a um limiar normalizado versionado. Ela
 não pode ser reutilizada como limite absoluto para apostas de 16 a 20 dezenas.
 
-`extreme_count` é a quantidade de regras satisfeitas.
+As fórmulas de E1–E8 permanecem semanticamente iguais para 15–20. Para cada
+tamanho de 16 a 20, limites próprios são derivados das distribuições teóricas
+exatas, preservando separadamente, tanto quanto a discretização permitir, as
+raridades das caudas inferior e superior da regra de 15. E8 permanece
+unilateral. Contagens e frequências exatas acompanham cada limite; média ou
+interpolação manual não definem extremos. A média descritiva da soma é 195,
+208, 221, 234, 247 e 260 para `betSize` 15, 16, 17, 18, 19 e 20,
+respectivamente.
+
+E9 e E10 consomem integralmente as distribuições exatas de ocupação da Story
+2.1. Cada regra escolhe sua própria cauda de desvio normalizado por tamanho,
+usando como referência a raridade da regra equivalente de 15; empate entre
+limites igualmente próximos escolhe a alternativa mais conservadora, que
+classifica menos apostas como extremas. Linhas e colunas permanecem regras
+separadas.
+
+`extreme_count` é a quantidade de regras E1–E10 com `isExtreme = true`. Cada
+regra vale zero ou um, sem pesos ou duplicidade; sinais auxiliares não
+participam. O resultado de 0 a 10 registra as classificações individuais e a
+versão dos limites e não expressa chance de prêmio.
 
 ### 7.3 Massa estrutural neutra
 
-Esta massa é a referência teórica para cartelas simples de 15 dezenas. Para
-apostas de 16 a 20, o sistema deve calcular e versionar a massa correspondente
-ao respectivo universo; nunca deve reutilizar esta tabela.
+Cada tamanho de 15 a 20 possui massa teórica própria, obtida por enumeração
+integral de `C(25, betSize)`, sem amostragem, histórico ou download. A tabela
+abaixo é somente uma apresentação arredondada dos valores atuais de 15 e não é
+a fonte canônica. A fonte canônica é `LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT`, que
+registra contagens inteiras e frações exatas `count/universeSize`. Os valores e
+percentuais apresentados permanecem inalterados e não são recalculados nesta
+correção; a massa de 15 nunca é transferida para 16–20.
 
 | Faixa | Massa teórica |
 | --- | ---: |
@@ -476,9 +529,27 @@ ao respectivo universo; nunca deve reutilizar esta tabela.
 | 3 extremos | 0,3759% |
 | 4+ extremos | 0,2129% |
 
-O núcleo central usa pares 6-9, soma 176-214, moldura 8-12, dezenas 01-13 entre
-7-10 e pares consecutivos 7-10. Ele é referência de análise/estratégia, não
+Para todos os tamanhos, as faixas continuam sendo 0, 1, 2, 3 e 4+ extremos,
+sem rejeição automática no modo neutro. Cada universo calcula massas próprias
+para E1–E10, `extreme_count` 0–10, cinco faixas, critérios do núcleo, núcleo
+conjunto e cruzamento faixa × núcleo. Contagens são inteiros; frequências são
+frações exatas `count/universeSize`; percentuais são somente apresentação. Os
+artefatos registram `betSize`, versões de política, algoritmo, classificador e
+manifesto e hash determinístico.
+
+O núcleo central de 15 permanece pares 6–9, soma 176–214, moldura 8–12,
+dezenas 01–13 entre 7–10 e pares consecutivos 7–10. Para 16–20, as mesmas cinco
+métricas recebem limites próprios derivados das distribuições teóricas exatas,
+usando separadamente as massas das caudas inferior e superior de 15 como
+referência. Empates escolhem a faixa mais conservadora e estreita.
+`isCentralCore` exige os cinco critérios simultaneamente e registra cada
+resultado individual. O núcleo é informativo/auditável, não é filtro P0 nem
 predição.
+
+Resultados oficiais de 15 dezenas podem auditar a política original de 15 e
+alimentar pesquisa futura, mas não fornecem distribuições para cartelas 16–20,
+não são expandidos artificialmente e não entram nas massas, limites,
+classificador ou gerador.
 
 ### 7.4 Cobertura e expansão
 
@@ -505,13 +576,20 @@ são eliminadas: contam novamente na cobertura bruta, não ampliam a cobertura
 
 ### 7.5 Estratégias
 
-`neutral` aloca pela massa teórica. `experimental_special` da Independência usa:
+`neutral` não aplica alocação, filtro ou cota estrutural. A massa teórica serve
+somente como referência de auditoria. Apenas uma estratégia que declare
+explicitamente uma alocação estrutural pode impor percentuais nas faixas
+0/1/2/3/4+, convertidos em quantidades pela regra de maiores restos.
+
+`experimental_special` da Independência permanece restrita ao contrato já
+existente para apostas simples de 15 dezenas e usa:
 
 - bloco A: 143 jogos com 0 extremos, soma 176-214 e moldura 9-11;
 - bloco B: 143 jogos com 0 extremos, sem obrigação adicional.
 
 Essa estratégia é sempre experimental até evidência de validação/holdout e não
-pode ser promovida automaticamente.
+pode ser promovida automaticamente. Nenhuma estratégia experimental específica
+para apostas de 16–20 dezenas integra o P0.
 
 ## 8. Impressão A4 Lotofácil
 
@@ -565,10 +643,12 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   canonização/ordenação de jogos. Evidências:
   `docs/architecture/lotofacil-canonical-formula.md`, Story 2.5,
   `tests/lotofacil/canonical-formula-manifest.test.ts` e gate QA 2.5.
-- [ ] Calcular e versionar as massas e políticas estruturais próprias dos
-  universos de apostas 16–20 antes de habilitar sua geração automática; não
-  reutilizar a massa de 15 dezenas. Esta pendência preserva a restrição já
-  declarada na seção 7.3 e no manifesto canônico vigente.
+- [ ] Implementar e validar as massas e políticas estruturais próprias dos
+  universos de apostas 16–20 antes de habilitar sua geração automática. As
+  decisões de Produto e o contrato matemático estão aprovados na Story 4.11 e
+  em `docs/architecture/lotofacil-16-20-structural-policies-and-masses.md`;
+  falta a entrega executável, suas fixtures, a regressão bloqueante de 15 e o
+  gate QA. O manifesto será atualizado somente de modo aditivo e versionado.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
   simples, timeout de 30 s e erro zero, conforme

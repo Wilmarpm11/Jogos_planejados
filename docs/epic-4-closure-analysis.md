@@ -1,45 +1,53 @@
 # Análise de encerramento do Épico 4
 
-**Data da auditoria:** 2026-09-04
+**Data da auditoria:** 2026-09-06
 
-**Base auditada:** `origin/main@d9fbf066b1b5d9f9892d0e2ce22c81a3a1659d6d`
+**Base auditada:** `origin/main@9b9131873a76abcaf2d8a7b0bf2b558d02119c91`
+e branch local `docs/epic-4-backlog-4.10-4.11-ready`, criada a partir desse
+commit
 
 **Decisão:** Épico 4 permanece aberto
 
 ## Estado verificado
 
 - A `main` local foi atualizada exclusivamente por fast-forward e coincide com
-  `origin/main` em `d9fbf06`.
-- Os sete PRs existentes estão `MERGED`; não há PR nem issue aberta.
-- Antes da criação do novo draft, as 26 stories existentes estavam `Done` e os
-  26 gates correspondentes em `docs/qa/gates/` estavam `PASS`.
+  `origin/main` em `9b91318`.
+- Os oito PRs existentes estão `MERGED`; não há PR nem issue aberta.
+- Antes da restauração deste pacote documental, as 27 stories existentes na
+  `main` estavam `Done` e os 27 gates correspondentes em `docs/qa/gates/`
+  estavam `PASS`.
 - A Story 4.8 foi incorporada pelo PR #7, com gate QA `PASS`, score 100 e
   regressão integral de 174 testes registrada no artefato de qualidade.
+- A Story 4.9 foi incorporada pelo PR #8 no merge commit `9b91318`, com gate QA
+  `PASS`, AC1–AC12 sem gaps, 194 testes regressivos e CodeRabbit final sem
+  achados.
+- As Stories 4.10–4.12 ainda não existiam no início desta atualização; seus
+  drafts e o backlog anterior ao Épico 5 foram preparados sem implementação.
 - Nenhuma branch foi removida durante esta auditoria.
 - As alterações administrativas foram isoladas na branch local
-  `chore/epic-4-administrative-closure`, criada a partir de `d9fbf06`; ela é a
+  `docs/epic-4-backlog-4.10-4.11-ready`, criada a partir de `9b91318`; ela é a
   branch ativa deste trabalho e não faz parte do inventário de limpeza.
 
 ## Parecer de encerramento
 
-As Stories 4.1–4.8 podem ser consideradas administrativamente concluídas, mas
-o Épico 4 não pode ser encerrado como capacidade funcional completa. O fluxo
-invariante do produto exige `geração -> otimização de diversidade -> auditoria
-de cobertura`, enquanto as Stories 4.2–4.5 adiaram explicitamente a otimização
-e as Stories 4.6–4.8 avançaram para cobertura sem implementá-la. [Fonte:
-`docs/prd.md` — seção 2; `docs/architecture/product-invariants.md`; Stories
-4.2–4.5]
+As Stories 4.1–4.9 estão incorporadas à `main`, mas o Épico 4 ainda não pode ser
+encerrado porque o backlog 4.10–4.12 permanece sem implementação. A entrada no
+Épico 5 também exige os gates fundacionais de persistência e IPC descritos em
+`docs/backlog-before-epic-5.md`.
 
 ## Classificação das pendências
 
 | Capacidade | Classificação | Impacto no encerramento |
 | --- | --- | --- |
-| Otimização de diversidade | Lacuna funcional P0 do Épico 4 | Bloqueia o encerramento; é uma etapa obrigatória e ainda não possui política nem implementação. |
-| Cálculo operacional de custo e cotas (FR-06) | Enabler P0 entre os Épicos 4 e 5 | O catálogo versionado existe, mas não há cálculo de custo total/cota. Deve anteceder o relatório pré-impressão. |
-| Geração de apostas 16–20 | Lacuna P1 de FR-02/FR-05 | Expansão 15–20 não equivale a geração. O gerador atual aceita somente 15 e depende de políticas/massas próprias para 16–20. |
+| Otimização de diversidade | Entregue e incorporada pela Story 4.9 | Política, contrato, implementação e QA estão concluídos no PR #8 e em `main@9b91318`. |
+| Cálculo operacional de custo e cotas (FR-06) | Story 4.10, P0, Ready | Produto fechou as regras monetárias e de base; contrato `1.0` recebeu `PASS` arquitetural e a story recebeu `GO` 9/10 do PO. |
+| Políticas e massas 16–20 | Story 4.11, Ready | Sete decisões de Produto, contrato `1.0`, `PASS` arquitetural e `GO` do PO concluídos; implementação ainda não iniciada e permanece pré-requisito da 4.12. |
+| Geração de apostas 16–20 | Story 4.12, Draft | Expansão 15–20 não equivale a geração; depende da 4.11 e não amplia automaticamente diversidade/cobertura. |
+| Persistência local e IPC Tauri/Python | Fundação técnica anterior ao Épico 5 | Contratos, identidades, auditoria, erros, limites e packaging ainda precisam ser decididos; nenhuma implementação está autorizada. |
 | Relatório pré-impressão | Escopo explícito do Épico 5 | Não é débito da Story 4.8; depende de custo/cotas e deve compor resultados existentes sem recalculá-los. |
 | Aprovação e `FrozenPortfolio` | Escopo explícito do Épico 5 | Os tipos/hash básicos existem, mas o fluxo, a revisão e a persistência de congelamento ainda não. |
 | Revisão e reimpressão | Escopo explícito do Épico 5 | Deve operar somente sobre carteira congelada e não pode regenerar ou reordenar jogos; PDF físico continua no Épico 6. |
+| Capa/tela inicial | Planejamento UX do Épico 5 | O design pode amadurecer agora; código de interface fica bloqueado pela fundação técnica. |
 
 ## Decisões de reutilização, contrato e modalidade
 
@@ -49,56 +57,76 @@ e as Stories 4.6–4.8 avançaram para cobertura sem implementá-la. [Fonte:
 | Custo/cotas | Contrato reutilizável de cálculo monetário e cotas, com valores inteiros em centavos e regra auditável | Catálogo/snapshot versionado da Story 3.5 | Preços e regras da modalidade ao adaptador Lotofácil; a base oficial efetivamente comprada deve ser declarada e contada uma única vez | Não criar; contratos e testes de domínio são suficientes |
 | Política/massas 16–20 | Políticas e massas versionadas específicas para cada universo 16–20 | `MetricEngine`, ocupação normalizada, manifesto e combinatório existentes | Implementação ao módulo Lotofácil; proibida a transferência da massa/limiares de 15 | Não criar; regra específica deve permanecer na modalidade |
 | Geração 16–20 | Somente extensões compatíveis que a versão pública exigir | Contrato `PortfolioGenerator`, PRNG, canonização e combinatório existentes | Adaptador Lotofácil e políticas aprovadas para cada tamanho; preservar comportamento de 15 | Não criar; reutilizar a capacidade de geração existente |
+| Persistência local | Contrato versionado do agregado, identidades e auditoria antes de schema/migration | SQLite, migrations e padrões imutáveis de `data-access` já entregues | Payloads por modalidade ficam em adaptadores/contratos próprios | Não criar; contrato e testes de persistência serão a fonte de verdade |
+| IPC Tauri/Python | Contrato de processo versionado e suíte cruzada antes do motor Python | Schemas, progresso, cancelamento e erros das operações existentes | Python restrito a cálculo; sem banco, histórico bruto, paths ou credenciais | Não criar; automação de agente não substitui contrato entre processos |
 | Épico 5 | Contratos versionados para relatório, aprovação, revisão e persistência de estado | Canonização, hash, `FrozenPortfolio`, auditorias, cobertura, estratégia, snapshots e `data-access` | Impressão/PDF ao Épico 6; nenhuma regeneração durante reimpressão | Não criar nesta fase; contratos operacionais serão a fonte de verdade |
+| Interface inicial | Especificação UX e, futuramente, componentes/tokens somente após decisão | Casos de uso CLI e contratos do Épico 5 | UI não recalcula domínio nem se torna fonte paralela de estado | Nenhuma skill de produto; AIOX UX é ferramenta de planejamento, não runtime |
 
 ## Ordem proposta de stories
 
 1. **Story 4.9 — Otimização determinística de diversidade da carteira
-   Lotofácil simples.** P0; restaura a sequência obrigatória antes do
-   encerramento do Épico 4.
-2. **Story 4.10 — Cálculo operacional de custo e cotas Lotofácil.** P0; compõe
-   o catálogo existente e habilita o relatório do Épico 5.
+   Lotofácil simples.** Concluída e incorporada pelo PR #8 em `9b91318`.
+2. **Story 4.10 — Cálculo operacional de custo e cotas Lotofácil.** P0 e
+   `Ready`; compõe o catálogo existente e habilita o relatório do Épico 5.
 3. **Story 4.11 — Políticas e massas estruturais versionadas Lotofácil
-   16–20.** P1; fecha a lacuna matemática sem reutilizar parâmetros de 15.
-4. **Story 4.12 — Geração determinística de apostas Lotofácil 16–20.** P1;
-   depende da Story 4.11 e reutiliza o contrato de geração existente.
-5. **Story 5.1 — Relatório pré-impressão versionado.** Compõe carteira,
+   16–20.** P1 e `Ready`; contrato exato aprovado sem reutilizar parâmetros de
+   15; implementação ainda não iniciada.
+4. **Gate F5-IPC-SPEC — especificação Tauri/TypeScript–Python.** Decide, sem
+   implementar, se a Story 4.12 permanece em TypeScript limitado ou exige uma
+   operação no worker Python.
+5. **Story 4.12 — Geração determinística de apostas Lotofácil 16–20.** P1;
+   depende da Story 4.11 e de F5-IPC-SPEC; se Python for escolhido, depende
+   também de F5-IPC-DONE antes do código.
+6. **Gate F5-PERSIST-DONE — Persistência local.** Define primeiro o agregado,
+   identidades, versões, auditoria, erros e limites; depois implementa e valida
+   sua conformidade em story própria.
+7. **Gate F5-IPC-DONE — Contrato Tauri/TypeScript–Python.** Implementa e valida
+   envelope, operações, cancelamento, erros, limites e packaging definidos em
+   F5-IPC-SPEC.
+8. **Story 5.1 — Relatório pré-impressão versionado.** Compõe carteira,
    estratégia, custo, auditorias, cobertura, snapshots e hash.
-6. **Story 5.2 — Aprovação e congelamento imutável da carteira.** Cria a
+9. **Story 5.2 — Aprovação e congelamento imutável da carteira.** Cria a
    transição de estado e sua persistência auditável.
-7. **Story 5.3 — Revisões e identidade para reimpressão.** Preserva jogos e hash
+10. **Story 5.3 — Revisões e identidade para reimpressão.** Preserva jogos e hash
    sem executar o gerador; renderização e homologação física ficam no Épico 6.
+11. **Interface do Épico 5.** A capa/tela inicial é planejada agora por UX, mas
+    só entra em implementação depois dos dois gates fundacionais.
 
-As stories de diversidade, custo/cotas e geração 16–20 permanecem separadas.
-A numeração 4.11/4.12 pode ser movida após a primeira fatia do Épico 5 somente
-por decisão explícita de Produto aceitando a lacuna temporária de FR-02.
+As stories de diversidade, custo/cotas, políticas/massas e geração 16–20
+permanecem separadas. O backlog detalhado, suas dependências, critérios de Ready
+e riscos estão em `docs/backlog-before-epic-5.md`.
 
 ## Decisão de Produto aprovada para custo/cotas — FR-06
 
-- A taxa de serviço é um percentual configurável pelo operador. Seu valor
-  inicial seguro é `0%`, que não adiciona cobrança. `30%` é permitido somente
-  como exemplo, nunca como taxa oficial, obrigatória ou padrão.
+- A taxa de serviço usa `feeBps`, inteiro entre `0` e `10.000`, inclusive;
+  `100 bps = 1%`. Seu valor inicial seguro é `0`, que não adiciona cobrança.
+  `30%` é permitido somente como exemplo, nunca como taxa oficial, obrigatória
+  ou padrão.
 - A incidência ocorre sobre o custo oficial total da carteira efetivamente
-  comprada, conforme o catálogo CAIXA versionado. A base declara se os itens
-  comprados são apostas-fonte ou combinações expandidas e os conta uma única
-  vez; as duas representações não podem ser cobradas simultaneamente.
-- Dinheiro é representado em centavos inteiros. O valor total da taxa é
-  arredondado para centavos antes do rateio.
-- O total cobrado é dividido em centavos pela quantidade de cotas. Qualquer
-  resto é distribuído deterministicamente, um centavo adicional para cada uma
-  das primeiras cotas em ordem canônica, e a soma das cotas conserva exatamente
-  o total.
+  comprada, conforme o catálogo CAIXA versionado. A base homogênea declara
+  exclusivamente `SOURCE_BETS` ou `EXPANDED_SIMPLE_BETS`. Fonte usa o preço do
+  tamanho 15–20; expansão usa o preço simples de 15. Cada ocorrência, inclusive
+  duplicata legítima, é contabilizada uma única vez.
+- Todos os cálculos são inteiros:
+  `feeCents = HALF_UP(officialCostCents × feeBps / 10000)` e
+  `totalCents = officialCostCents + feeCents`.
+- O valor-base da cota usa piso. Cada centavo restante é atribuído pela ordem
+  numérica crescente de `quotaId`, que é positivo, único, estável e fornecido no
+  request. Rateio que produza qualquer cota de zero centavo é rejeitado.
+- A quantidade de cotas deriva da lista de IDs e deve respeitar
+  `minShares`/`maxShares` do catálogo; `maxGamesPerReceipt` não pertence ao
+  cálculo.
 - O resultado separa custo oficial, percentual, valor da taxa, total cobrado e
-  valores das cotas, além de registrar a base de cálculo, a regra de
-  arredondamento e a distribuição do resto.
+  valores das cotas, além de registrar base, HALF_UP, distribuição do resto,
+  contrato e proveniência do catálogo fornecido já resolvido pelo chamador.
 - A futura story implementará cálculo puro e auditável. Pagamento, venda de
   cotas, participantes e integração financeira ficam fora do escopo.
 
-Essa decisão fecha a política funcional de incidência, arredondamento e rateio,
-mas não implementa nem torna `Ready` a Story 4.10. A futura definição do
-contrato ainda deve explicitar a representação decimal do percentual, seus
-limites de validação e a identidade canônica das cotas sem alterar as regras
-acima. Ela também não resolve nenhuma das decisões bloqueantes da Story 4.9.
+Essas decisões estão materializadas no contrato arquitetural
+`docs/architecture/lotofacil-operational-cost-and-quotas-contract.md` `1.0`,
+com parecer `PASS`. Isso fecha o gate de especificação sem implementar a
+capacidade e não altera nem reabre a Story 4.9. A promoção formal da Story 4.10
+para `Ready` foi aprovada pelo PO com `GO` 9/10 em 2026-09-05.
 
 ## Decisões da Story 4.9
 
@@ -118,23 +146,36 @@ resultado parcial, ausência de timeout em `1.0` e uma primitiva compartilhada d
 interseção em `@boloes/combinatorics`.
 
 O contrato arquitetural está em
-`docs/architecture/portfolio-diversity-optimization-contract.md`. A decisão
-fecha as cinco categorias antes abertas; após `PASS` de Arquitetura e `GO` do
-PO em 2026-09-04, a Story 4.9 foi promovida de `Draft` para `Ready`, ainda sem
-implementação.
+`docs/architecture/portfolio-diversity-optimization-contract.md`. A Story 4.9
+foi concluída em 2026-09-05 com gate QA `PASS`, 194 testes e CodeRabbit final
+sem achados. O commit final da branch foi `2c9dc3c` e o PR #8 foi incorporado à
+`main` em 2026-09-06 pelo merge commit `9b91318`.
 
 ## Decisões abertas
 
 ### Para as stories seguintes
 
-1. Resolver e versionar E1–E10, classificação e massas para cada tamanho 16–20.
-2. Decidir se 16–20 bloqueia a entrada no Épico 5 ou será extensão priorizada.
-3. No Épico 5, decidir quais achados de auditoria bloqueiam aprovação e quais
-   são apenas avisos.
+1. Story 4.11: implementar o contrato aprovado de E1–E10, faixas, núcleo,
+   massas/fixtures exatas, versões e hashes para 16–20, preservando a regressão
+   bloqueante de 15.
+2. Story 4.12: modos autorizados, limites, compatibilidade de seed, erros e
+   fronteiras com diversidade/expansão/cobertura por tamanho.
+3. F5-PERSIST: inventário persistido, identidades, mutabilidade, versionamento,
+   auditoria, atomicidade, recuperação, erros e limites; contrato aprovado não
+   equivale ao gate de saída `F5-PERSIST-DONE`.
+4. F5-IPC-SPEC: envelope, serialização, operações, progresso, cancelamento,
+   erros, limites, compatibilidade, empacotamento local e a fronteira de
+   execução da 4.12.
+5. F5-IPC-DONE: implementação aplicável e conformidade cruzada do contrato; é
+   bloqueante para a 4.12 somente se o SPEC escolher Python, e sempre bloqueia
+   a entrada no Épico 5 e a implementação da UI.
+6. Épico 5: decidir quais achados bloqueiam aprovação, conteúdo/identidade do
+   relatório, ato de aprovação, fronteira do hash, revisões e navegação/conteúdo
+   da tela inicial.
 
 ## Inventário de branches
 
-O repositório remoto possui `main` e seis branches de trabalho. Todas as seis
+O repositório remoto possui `main` e sete branches de trabalho. Todas as sete
 têm PR correspondente comprovadamente `MERGED` pelo GitHub e podem ser
 removidas após autorização explícita, apesar de seus commits não aparecerem
 como ancestrais diretos da `main` por causa do squash merge.
@@ -147,6 +188,7 @@ como ancestrais diretos da `main` por causa do squash merge.
 | `chore/4.6-post-merge-closure` | `8bbe0c6` | PR #5 `MERGED` | `affa226` |
 | `feature/4.7-lotofacil-canonical-bet-expansion` | `22ad241` | PR #6 `MERGED` | `59cefa4` |
 | `feature/4.8-lotofacil-expanded-coverage-composition` | `868aee3` | PR #7 `MERGED` | `d9fbf06` |
+| `feature/4.9-lotofacil-deterministic-diversity-optimization` | `2c9dc3c` | PR #8 `MERGED` | `9b91318` |
 
 A branch da Story 4.4 já não existe localmente nem no remoto; o PR #1 está
 `MERGED` em `575297c`.
