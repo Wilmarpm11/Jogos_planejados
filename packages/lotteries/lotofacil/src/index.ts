@@ -22,6 +22,7 @@ import {
   type PortfolioGenerationRequest,
   type PortfolioGenerationResult,
   type PortfolioGenerator,
+  type PortfolioDiversityOptimizationAdapter,
   type PortfolioStructuralDistributionAdapter,
   type StructuralClassifier,
   type StructuralBand,
@@ -63,6 +64,12 @@ export const LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION = "1.0.0";
 export const LOTOFACIL_EXACT_COVERAGE_ADAPTER_VERSION = "lotofacil-exact-coverage/1.0.0";
 export const LOTOFACIL_CANONICAL_BET_EXPANSION_ADAPTER_VERSION =
   "lotofacil-canonical-bet-expansion/1.0.0";
+export const LOTOFACIL_DIVERSITY_OPTIMIZATION_ADAPTER_VERSION =
+  "lotofacil-diversity-optimization/1.0.0";
+export const LOTOFACIL_CANONICAL_GAME_ORDER_VERSION =
+  "locale-compare-of-comma-joined-canonical-games/1.0.0";
+export const LOTOFACIL_STRUCTURAL_ALLOCATION_ALGORITHM_VERSION =
+  "lotofacil-largest-remainder/1.0.0";
 export const LOTOFACIL_CANONICAL_FORMULA_VERSION = "1.0.0";
 export const LOTOFACIL_SUPPORTED_BET_SIZES = [15, 16, 17, 18, 19, 20] as const;
 const LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE = 3_268_760;
@@ -256,7 +263,7 @@ function unrankLotofacilSimpleBet(rank: number): readonly number[] {
   return selected;
 }
 
-function structuralAllocationCounts(
+export function calculateLotofacilStructuralAllocationCounts(
   allocation: Readonly<Record<string, number>>,
   candidateCount: number,
 ): Readonly<Record<StructuralBand, number>> {
@@ -283,7 +290,10 @@ function isLotofacilDefinition(definition: LotteryDefinition): boolean {
     definition.maxBetSize === LOTOFACIL_DEFINITION.maxBetSize;
 }
 
-function canonicalGameOrder(left: readonly number[], right: readonly number[]): number {
+export function compareLotofacilCanonicalGames(
+  left: readonly number[],
+  right: readonly number[],
+): number {
   return left.join(",").localeCompare(right.join(","));
 }
 
@@ -357,7 +367,10 @@ export function generateLotofacilPortfolio(
   }
 
   const targets = strategy.structuralAllocation
-    ? structuralAllocationCounts(strategy.structuralAllocation, parameters.candidateCount)
+    ? calculateLotofacilStructuralAllocationCounts(
+      strategy.structuralAllocation,
+      parameters.candidateCount,
+    )
     : null;
   const random = createDeterministicRandom(parameters.seed);
   const offset = random.nextInt(LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE);
@@ -385,7 +398,7 @@ export function generateLotofacilPortfolio(
   }
 
   return {
-    candidates: candidates.sort(canonicalGameOrder).map((numbers) => ({ numbers })),
+    candidates: candidates.sort(compareLotofacilCanonicalGames).map((numbers) => ({ numbers })),
     transient: true,
     persisted: false,
     frozen: false,
@@ -1032,6 +1045,56 @@ export const lotofacilPortfolioStructuralDistributionAdapter: PortfolioStructura
     const profile = lotofacilMetricEngine.calculate(numbers);
     const classification = lotofacilStructuralClassifier.classify(profile);
     return summarizeLotofacilStructuralProfile(profile, classification);
+  },
+};
+
+/** Lotofácil 25/15 adapter for the modality-neutral diversity optimizer. */
+export const lotofacilPortfolioDiversityOptimizationAdapter:
+  PortfolioDiversityOptimizationAdapter = {
+  lotteryId: LOTOFACIL_ID,
+  adapterVersion: LOTOFACIL_DIVERSITY_OPTIMIZATION_ADAPTER_VERSION,
+  betSize: LOTOFACIL_DEFINITION.drawSize,
+  candidateOrderingVersion: LOTOFACIL_CANONICAL_GAME_ORDER_VERSION,
+  structuralClassifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION,
+  structuralAllocationAlgorithmVersion: LOTOFACIL_STRUCTURAL_ALLOCATION_ALGORITHM_VERSION,
+  supportsDefinition: isLotofacilDefinition,
+  validateCandidate(numbers: readonly number[]): void {
+    assertValidNumbers(numbers);
+    if (numbers.length !== LOTOFACIL_DEFINITION.drawSize) {
+      throw new Error("Lotofácil diversity optimization supports only canonical 15-number bets.");
+    }
+    for (let index = 1; index < numbers.length; index += 1) {
+      if (numbers[index]! <= numbers[index - 1]!) {
+        throw new Error("Lotofácil diversity candidates must be in strictly ascending order.");
+      }
+    }
+  },
+  canonicalKey(numbers: readonly number[]): string {
+    return numbers.join(",");
+  },
+  compareCandidates: compareLotofacilCanonicalGames,
+  classifyStructuralGroup(numbers: readonly number[]): string {
+    const profile = calculateLotofacilMetricProfile(numbers);
+    const classification = classifyLotofacilStructuralProfile(profile);
+    const summary = summarizeLotofacilStructuralProfile(profile, classification);
+    if (!summary.applicable || summary.band === null) {
+      throw new Error("Lotofácil structural classification is unavailable for this candidate.");
+    }
+    return summary.band;
+  },
+  resolveStructuralTargets(
+    allocation: Readonly<Record<string, number>>,
+    targetCandidateCount: number,
+  ) {
+    const counts = calculateLotofacilStructuralAllocationCounts(
+      allocation,
+      targetCandidateCount,
+    );
+    return LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS.map((key) => ({
+      group: lotofacilAllocationBand[key],
+      requestedPercent: allocation[key]!,
+      targetCount: counts[lotofacilAllocationBand[key]],
+    }));
   },
 };
 

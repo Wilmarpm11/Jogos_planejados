@@ -21,6 +21,7 @@ import {
   type PortfolioStructuralDistributionAuditResult,
   type StructuralBand,
 } from "@boloes/lottery-contracts";
+import { intersectionCardinality } from "@boloes/combinatorics";
 
 const PAIRWISE_AUDIT_BATCH_SIZE = 2_048;
 const STRUCTURAL_DISTRIBUTION_AUDIT_BATCH_SIZE = 256;
@@ -88,26 +89,6 @@ export function validatePortfolioAuditCandidates(
     validateCandidate(candidate.numbers, candidateIndex, betSize, definition.totalNumbers);
   });
   return betSize;
-}
-
-function intersectionSize(left: readonly number[], right: readonly number[]): number {
-  let leftIndex = 0;
-  let rightIndex = 0;
-  let size = 0;
-  while (leftIndex < left.length && rightIndex < right.length) {
-    const leftNumber = left[leftIndex]!;
-    const rightNumber = right[rightIndex]!;
-    if (leftNumber === rightNumber) {
-      size += 1;
-      leftIndex += 1;
-      rightIndex += 1;
-    } else if (leftNumber < rightNumber) {
-      leftIndex += 1;
-    } else {
-      rightIndex += 1;
-    }
-  }
-  return size;
 }
 
 function yieldToEventLoop(): Promise<void> {
@@ -236,7 +217,10 @@ export async function auditPortfolioIntersections(
   emitProgress();
   for (let leftIndex = 0; leftIndex < candidates.length - 1; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
-      const size = intersectionSize(candidates[leftIndex]!.numbers, candidates[rightIndex]!.numbers);
+      const size = intersectionCardinality(
+        candidates[leftIndex]!.numbers,
+        candidates[rightIndex]!.numbers,
+      );
       intersections.push({ candidateIndexes: [leftIndex, rightIndex], intersectionSize: size });
       histogramCounts[size]! += 1;
       processedPairs += 1;

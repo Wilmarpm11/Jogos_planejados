@@ -7,6 +7,9 @@
     "@boloes/audit-engine": "file:../../packages/audit-engine",
     "@boloes/coverage-engine": "file:../../packages/coverage-engine",
     "@boloes/data-access": "file:../../packages/data-access",
+    "@boloes/lottery-contracts": "file:../../packages/lottery-contracts",
+    "@boloes/lottery-lotofacil": "file:../../packages/lotteries/lotofacil",
+    "@boloes/portfolio-engine": "file:../../packages/portfolio-engine",
     "@boloes/result-ingestion": "file:../../packages/result-ingestion",
     "@boloes/strategy-registry": "file:../../packages/strategy-registry",
     "@boloes/statistics-engine": "file:../../packages/statistics-engine"
