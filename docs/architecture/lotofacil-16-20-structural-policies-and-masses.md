@@ -267,11 +267,18 @@ Mistura de `betSize`, política, classificador, manifesto ou versão de algoritm
   política consumidora;
 - mudança de limite, operador, desempate, núcleo ou composição de
   `extreme_count` exige nova versão da política e do classificador;
-- mudança de cálculo da massa exige nova versão do algoritmo ou schema;
-- qualquer mudança que altere os bytes canônicos exige novas versões de
-  `canonicalSerializationVersion` e `artifactSchemaVersion`, novas fixtures e
-  novos hashes, sem reinterpretar ou recalcular silenciosamente artefatos
-  antigos;
+- mudança de cálculo da massa exige nova `massAlgorithmVersion`;
+- mudança no contrato de serialização exige nova
+  `canonicalSerializationVersion`; mudança no schema exige nova
+  `artifactSchemaVersion`; se ambos mudarem, ambas as versões avançam e novas
+  fixtures normativas são obrigatórias;
+- artefatos antigos nunca são reinterpretados silenciosamente;
+- mudança válida somente no conteúdo de política ou massa conserva
+  `canonicalSerializationVersion` e `artifactSchemaVersion`: conteúdo de
+  política avança `policyVersion` e, quando alterar a composição publicada do
+  conjunto, `policySetVersion`; conteúdo de massa decorrente de nova política
+  carrega a nova `policyVersion`, enquanto mudança no cálculo da massa avança
+  `massAlgorithmVersion`. Todo novo artefato recebe novo `artifactHash`;
 - mudança de `betSize` sempre possui `policyId` e massa distintos;
 - artefatos antigos permanecem identificáveis e nunca são recalculados sob uma
   versão nova sem produzir uma nova identidade/hash.
