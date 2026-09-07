@@ -1,7 +1,7 @@
 # Backlog obrigatório antes do Épico 5
 
-**Status:** planejamento — Stories 4.10 e 4.11 `Ready`; nenhuma implementação iniciada
-**Data:** 2026-09-05
+**Status:** planejamento — Stories 4.10 e 4.11 `Done`; Story 4.12 `Draft`; Épico 4 aberto
+**Data:** 2026-09-07
 **Escopo protegido:** a Story 4.9 permanece concluída e não é alterada por este
 backlog.
 
@@ -21,8 +21,8 @@ Fontes: `docs/prd.md` — FR-02, FR-05, FR-06, FR-07, §§5, 7 e 9–11;
 
 | Ordem | Item | Depende de | Libera |
 | --- | --- | --- | --- |
-| 1 | Story 4.10 — cálculo operacional de custo e cotas (FR-06), `Ready` | catálogo CAIXA versionado da 3.5 e contrato `1.0` aprovado | composição monetária auditável do relatório do Épico 5 |
-| 2 | Story 4.11 — políticas e massas estruturais Lotofácil 16–20, `Ready` | métricas, ocupação, faixas e manifesto das 2.1–2.5; contrato `1.0` aprovado | política versionada necessária à geração 16–20 |
+| 1 | Story 4.10 — cálculo operacional de custo e cotas (FR-06), `Done` em `main@f04a9ec` | catálogo CAIXA versionado da 3.5 e contrato `1.0` aprovado | composição monetária auditável do relatório do Épico 5 |
+| 2 | Story 4.11 — políticas e massas estruturais Lotofácil 16–20, `Done` pelo PR #11 em `main@390c7cd` | métricas, ocupação, faixas e manifesto das 2.1–2.5; contrato `1.0` aprovado | pré-requisito matemático da geração 16–20; não promove a 4.12 sem `F5-IPC-SPEC` e os demais gates |
 | 3 | Gate F5-IPC-SPEC — especificação Tauri/TypeScript–Python | operações e limites computacionais candidatos identificados | decisão versionada sobre a fronteira de execução da 4.12 e sobre o primeiro uso autorizado de Python |
 | 4 | Story 4.12 — geração completa de apostas 16–20 | Story 4.11 concluída; contrato/gerador da 4.2; fronteira de expansão da 4.7; F5-IPC-SPEC aprovado | geração de apostas-fonte 16–20 sem alterar o comportamento de 15; se Python for obrigatório, F5-IPC-DONE também precede o código |
 | 5 | Gate F5-PERSIST-DONE — fundação de persistência local | contratos dos artefatos que serão persistidos identificados; no mínimo custo/cotas 4.10 e carteira/auditorias já estáveis | relatório, aprovação, revisões e `FrozenPortfolio` persistidos |
@@ -96,7 +96,7 @@ implementação da própria 4.12.
 
 ## Story 4.11 — políticas e massas 16–20
 
-### Resultado esperado
+### Resultado entregue
 
 - Definir e calcular políticas e massas versionadas separadamente para cada
   `betSize` de 16 a 20, com regressão integral de 15.
@@ -134,8 +134,8 @@ O contrato
 recebeu `PASS`. Ele fecha comparação racional de caudas e desempates, schemas,
 IDs, versões/proveniência, serialização/hash, duas passagens integrais com teto
 de 14.208.480 visitas, progresso JSONL, cancelamento/130, erros, ausência de
-timeout e regressão bloqueante de 15. O manifesto só será estendido de modo
-aditivo e versionado junto à implementação.
+timeout e regressão bloqueante de 15. O manifesto foi estendido de modo aditivo
+e versionado pela implementação concluída.
 
 ### Definition of Ready
 
@@ -151,7 +151,20 @@ aditivo e versionado junto à implementação.
 - [x] PO emitiu `GO` 9/10 e promoveu a Story 4.11 de `Draft` para `Ready` em
   2026-09-05.
 
+### Fechamento da entrega
+
+- Story 4.11 `Done` após o PR #11, com HEAD revisado
+  `dac4910c43d1d9324cd9390157f8e35d5136a2c6` e squash em
+  `main@390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c`.
+- QA `PASS` 100/100 e CodeRabbit `SUCCESS`, sem threads ou achados acionáveis.
+- Fixture, índice e os seis pares `policyHash`/`massHash` foram preservados.
+  [closure-key: 4.11:commit:390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c]
+
 ## Story 4.12 — geração completa 16–20
+
+**Status preservado:** `Draft`. A Story 4.11 satisfez somente o pré-requisito
+matemático; `F5-IPC-SPEC`, as decisões contratuais e os demais gates abaixo
+continuam bloqueando a promoção para `Ready`.
 
 ### Resultado esperado
 
