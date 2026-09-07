@@ -2472,3 +2472,585 @@ export interface OperationalCostAndQuotasAdapter<TContext, TResult> {
     result: unknown,
   ): TResult;
 }
+
+export const LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION = "1.0" as const;
+export const LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION = "1.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION =
+  "lotofacil-structural-canonical-json/1.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_POLICY_SET_ID = "lotofacil-structural-policy" as const;
+export const LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION = "1.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_POLICY_VERSION = "1.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM = "EXACT_TAIL_RARITY_MATCH" as const;
+export const LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM_VERSION =
+  "exact-tail-rarity-match/1.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION = "2.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION = "2.0.0" as const;
+export const LOTOFACIL_STRUCTURAL_FORMULA_VERSION = "1.1.0" as const;
+export const LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS = 14_208_480 as const;
+export const LOTOFACIL_STRUCTURAL_CANCELLATION_BATCH_SIZE = 4_096 as const;
+export const LOTOFACIL_STRUCTURAL_PROGRESS_INTERVAL = 10_000 as const;
+
+export const lotofacilStructuralPolicyErrorCodeSchema = z.enum([
+  "INVALID_STRUCTURAL_POLICY_REQUEST",
+  "STRUCTURAL_POLICY_DEPENDENCY_MISMATCH",
+  "STRUCTURAL_POLICY_LIMIT_DERIVATION_FAILED",
+  "STRUCTURAL_MASS_RECONCILIATION_FAILED",
+  "STRUCTURAL_ARTIFACT_HASH_MISMATCH",
+  "STRUCTURAL_POLICY_BUILD_CANCELLED",
+]);
+export type LotofacilStructuralPolicyErrorCode = z.infer<
+  typeof lotofacilStructuralPolicyErrorCodeSchema
+>;
+
+export class LotofacilStructuralPolicyError<
+  Code extends LotofacilStructuralPolicyErrorCode = LotofacilStructuralPolicyErrorCode,
+> extends Error {
+  constructor(readonly code: Code, message: string) {
+    super(message);
+    this.name = "LotofacilStructuralPolicyError";
+  }
+}
+
+export class InvalidStructuralPolicyRequestError extends
+  LotofacilStructuralPolicyError<"INVALID_STRUCTURAL_POLICY_REQUEST"> {
+  constructor(message = "Invalid Lotofacil structural policy request.") {
+    super("INVALID_STRUCTURAL_POLICY_REQUEST", message);
+  }
+}
+
+export class StructuralPolicyDependencyMismatchError extends
+  LotofacilStructuralPolicyError<"STRUCTURAL_POLICY_DEPENDENCY_MISMATCH"> {
+  constructor(message = "Lotofacil structural policy dependencies are incompatible.") {
+    super("STRUCTURAL_POLICY_DEPENDENCY_MISMATCH", message);
+  }
+}
+
+export class StructuralPolicyLimitDerivationFailedError extends
+  LotofacilStructuralPolicyError<"STRUCTURAL_POLICY_LIMIT_DERIVATION_FAILED"> {
+  constructor(message = "Lotofacil structural policy limit derivation failed.") {
+    super("STRUCTURAL_POLICY_LIMIT_DERIVATION_FAILED", message);
+  }
+}
+
+export class StructuralMassReconciliationFailedError extends
+  LotofacilStructuralPolicyError<"STRUCTURAL_MASS_RECONCILIATION_FAILED"> {
+  constructor(message = "Lotofacil structural mass reconciliation failed.") {
+    super("STRUCTURAL_MASS_RECONCILIATION_FAILED", message);
+  }
+}
+
+export class StructuralArtifactHashMismatchError extends
+  LotofacilStructuralPolicyError<"STRUCTURAL_ARTIFACT_HASH_MISMATCH"> {
+  constructor(message = "Lotofacil structural artifact hash does not match its canonical bytes.") {
+    super("STRUCTURAL_ARTIFACT_HASH_MISMATCH", message);
+  }
+}
+
+export class StructuralPolicyBuildCancelledError extends
+  LotofacilStructuralPolicyError<"STRUCTURAL_POLICY_BUILD_CANCELLED"> {
+  constructor(message = "Lotofacil structural policy build cancelled.") {
+    super("STRUCTURAL_POLICY_BUILD_CANCELLED", message);
+    this.name = "AbortError";
+  }
+}
+
+function structuralGreatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a === 0 ? 1 : a;
+}
+
+export const canonicalExactFractionSchema = z.object({
+  denominator: z.number().int().positive().safe(),
+  numerator: z.number().int().nonnegative().safe(),
+}).strict().superRefine((fraction, context) => {
+  if (fraction.numerator === 0 && fraction.denominator !== 1) {
+    context.addIssue({ code: "custom", message: "Canonical zero must be represented as 0/1." });
+  } else if (
+    fraction.numerator > 0 &&
+    structuralGreatestCommonDivisor(fraction.numerator, fraction.denominator) !== 1
+  ) {
+    context.addIssue({ code: "custom", message: "Canonical fractions must be reduced." });
+  }
+});
+
+const structuralBetSizeSchema = z.union([
+  z.literal(15), z.literal(16), z.literal(17),
+  z.literal(18), z.literal(19), z.literal(20),
+]);
+const structuralArtifactHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const structuralRuleIdSchema = z.enum([
+  "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
+]);
+const structuralRuleMetricSchema = z.enum([
+  "EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT",
+  "CONSECUTIVE_PAIR_COUNT", "MAX_CONSECUTIVE_RUN", "SEQUENCE_COUNT",
+  "AMPLITUDE", "ROW_DEVIATION_NORMALIZED", "COLUMN_DEVIATION_NORMALIZED",
+]);
+const structuralCoreMetricSchema = z.enum([
+  "EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT",
+  "CONSECUTIVE_PAIR_COUNT",
+]);
+const structuralLimitSchema = z.union([
+  z.number().int().nonnegative().safe(),
+  canonicalExactFractionSchema,
+]);
+const exactTailEvidenceSchema = z.object({
+  tail: z.enum(["LOWER", "UPPER"]),
+  operator: z.enum(["LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL"]),
+  limit: structuralLimitSchema,
+  count: z.number().int().nonnegative().safe(),
+  frequency: canonicalExactFractionSchema,
+  referenceBetSize: z.literal(15),
+  referenceLimit: structuralLimitSchema,
+  referenceCount: z.number().int().nonnegative().safe(),
+  referenceFrequency: canonicalExactFractionSchema,
+  distanceNumerator: z.number().int().nonnegative().safe(),
+}).strict();
+
+const structuralRulePolicySchema = z.object({
+  ruleId: structuralRuleIdSchema,
+  metric: structuralRuleMetricSchema,
+  tails: z.array(exactTailEvidenceSchema).min(1).max(2),
+}).strict();
+const structuralCoreCriterionPolicySchema = z.object({
+  metric: structuralCoreMetricSchema,
+  minInclusive: z.number().int().nonnegative().safe(),
+  maxInclusive: z.number().int().nonnegative().safe(),
+  lowerTail: exactTailEvidenceSchema,
+  upperTail: exactTailEvidenceSchema,
+}).strict().refine(
+  (criterion) => criterion.minInclusive <= criterion.maxInclusive,
+  "Central-core minimum must not exceed its maximum.",
+);
+const structuralAxisDistributionBucketSchema = z.object({
+  valueNumerator: z.number().int().nonnegative().safe(),
+  valueDenominator: z.number().int().positive().safe(),
+  occurrences: z.number().int().positive().safe(),
+}).strict();
+const structuralAxisDistributionSchema = z.object({
+  lotteryId: z.literal("lotofacil"),
+  algorithmVersion: z.string().min(1),
+  betSize: structuralBetSizeSchema,
+  axis: axisNameSchema,
+  metric: axisOccupancyMetricSchema,
+  tail: z.literal("GREATER_THAN_OR_EQUAL"),
+  totalOutcomes: z.number().int().positive().safe(),
+  buckets: z.array(structuralAxisDistributionBucketSchema).min(1),
+}).strict();
+
+const lotofacilStructuralPolicyBaseSchema = z.object({
+  contractVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION),
+  artifactSchemaVersion: z.literal(LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION),
+  canonicalSerializationVersion: z.literal(LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION),
+  policySetId: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_ID),
+  policySetVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION),
+  policyId: z.string().regex(/^lotofacil-structural-policy\/(15|16|17|18|19|20)$/),
+  policyVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_VERSION),
+  derivationAlgorithm: z.literal(LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM),
+  derivationAlgorithmVersion: z.literal(LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM_VERSION),
+  classifierVersion: z.literal(LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION),
+  massAlgorithmVersion: z.literal(LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION),
+  metricEngineVersion: z.literal("1.0.0"),
+  axisOccupancyAlgorithmVersion: z.literal("1.0.0"),
+  lotteryId: z.literal("lotofacil"),
+  lotteryDefinitionVersion: z.literal("1.0.0"),
+  betSize: structuralBetSizeSchema,
+  universeSize: z.number().int().positive().safe(),
+  descriptiveMeanSum: z.number().int().positive().safe(),
+  rules: z.array(structuralRulePolicySchema).length(10),
+  centralCore: z.array(structuralCoreCriterionPolicySchema).length(5),
+  axisDistributions: z.array(structuralAxisDistributionSchema).length(6),
+  auxiliaryOperationalPolicyApplicable: z.boolean(),
+  historyUsed: z.literal(false),
+  samplingUsed: z.literal(false),
+  probabilityClaimed: z.literal(false),
+}).strict().superRefine((policy, context) => {
+  const expectedUniverseSizes: Record<number, number> = {
+    15: 3_268_760, 16: 2_042_975, 17: 1_081_575,
+    18: 480_700, 19: 177_100, 20: 53_130,
+  };
+  const expectedRuleMetrics = [
+    "EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT",
+    "CONSECUTIVE_PAIR_COUNT", "MAX_CONSECUTIVE_RUN", "SEQUENCE_COUNT",
+    "AMPLITUDE", "ROW_DEVIATION_NORMALIZED", "COLUMN_DEVIATION_NORMALIZED",
+  ];
+  const referenceLimits: readonly (readonly [number, number?])[] = [
+    [4, 11], [149, 241], [6, 14], [4, 12], [5, 12], [2, 9], [1, 7], [18],
+  ];
+  const referenceUniverseSize = expectedUniverseSizes[15]!;
+  const validateFrequency = (
+    count: number,
+    universeSize: number,
+    frequency: ExactFraction,
+    path: (string | number)[],
+  ): void => {
+    const divisor = structuralGreatestCommonDivisor(count, universeSize);
+    if (count > universeSize || frequency.numerator !== count / divisor ||
+      frequency.denominator !== universeSize / divisor) {
+      context.addIssue({ code: "custom", path, message: "Frequency must be the reduced exact count over its universe." });
+    }
+  };
+  const validateTailEvidence = (
+    tail: z.infer<typeof exactTailEvidenceSchema>,
+    path: (string | number)[],
+  ): void => {
+    validateFrequency(tail.count, policy.universeSize, tail.frequency, [...path, "frequency"]);
+    validateFrequency(tail.referenceCount, referenceUniverseSize, tail.referenceFrequency, [...path, "referenceFrequency"]);
+    const expectedDistance = Number(
+      BigInt(tail.count) * BigInt(referenceUniverseSize) -
+      BigInt(tail.referenceCount) * BigInt(policy.universeSize),
+    );
+    if (tail.distanceNumerator !== Math.abs(expectedDistance)) {
+      context.addIssue({ code: "custom", path: [...path, "distanceNumerator"], message: "Tail distance must match exact cross multiplication." });
+    }
+  };
+  policy.rules.forEach((rule, index) => {
+    if (rule.ruleId !== `E${index + 1}` || rule.metric !== expectedRuleMetrics[index]) {
+      context.addIssue({ code: "custom", path: ["rules", index], message: "Rules and metrics must use canonical E1-E10 order." });
+    }
+    const twoTails = index < 7;
+    if (rule.tails.length !== (twoTails ? 2 : 1)) {
+      context.addIssue({ code: "custom", path: ["rules", index, "tails"], message: "Rule declares an invalid tail count." });
+    }
+    rule.tails.forEach((tail, tailIndex) => {
+      const expectedTail = twoTails && tailIndex === 0 || index === 7 ? "LOWER" : "UPPER";
+      const expectedOperator = expectedTail === "LOWER" ? "LESS_THAN_OR_EQUAL" : "GREATER_THAN_OR_EQUAL";
+      if (tail.tail !== expectedTail || tail.operator !== expectedOperator) {
+        context.addIssue({ code: "custom", path: ["rules", index, "tails", tailIndex], message: "Rule tail/operator is not canonical." });
+      }
+      const expectedReference = index < 8
+        ? referenceLimits[index]![tailIndex]!
+        : { numerator: 8, denominator: 15 };
+      const referenceMatches = typeof expectedReference === "number"
+        ? tail.referenceLimit === expectedReference
+        : typeof tail.referenceLimit !== "number" &&
+          tail.referenceLimit.numerator === expectedReference.numerator &&
+          tail.referenceLimit.denominator === expectedReference.denominator;
+      const limitMatchesReference = typeof expectedReference === "number"
+        ? tail.limit === expectedReference
+        : typeof tail.limit !== "number" &&
+          tail.limit.numerator === expectedReference.numerator &&
+          tail.limit.denominator === expectedReference.denominator;
+      if (!referenceMatches) {
+        context.addIssue({ code: "custom", path: ["rules", index, "tails", tailIndex, "referenceLimit"], message: "Tail reference limit must remain frozen at the 15-number policy." });
+      }
+      if ((index < 8) !== (typeof tail.limit === "number")) {
+        context.addIssue({ code: "custom", path: ["rules", index, "tails", tailIndex, "limit"], message: "Scalar rules require integer limits and normalized-axis rules require exact fractions." });
+      }
+      validateTailEvidence(tail, ["rules", index, "tails", tailIndex]);
+      if (policy.betSize === 15 && (
+        !limitMatchesReference || tail.count !== tail.referenceCount || tail.distanceNumerator !== 0
+      )) {
+        context.addIssue({ code: "custom", path: ["rules", index, "tails", tailIndex], message: "The 15-number policy must remain identical to its frozen reference." });
+      }
+    });
+    if (rule.tails.length === 2 && typeof rule.tails[0]!.limit === "number" &&
+      typeof rule.tails[1]!.limit === "number" && rule.tails[0]!.limit >= rule.tails[1]!.limit) {
+      context.addIssue({ code: "custom", path: ["rules", index, "tails"], message: "Lower and upper structural tails must not overlap." });
+    }
+  });
+  policy.centralCore.forEach((criterion, index) => {
+    const expectedMetrics = ["EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT", "CONSECUTIVE_PAIR_COUNT"];
+    if (criterion.metric !== expectedMetrics[index] ||
+      criterion.lowerTail.operator !== "LESS_THAN" || criterion.lowerTail.tail !== "LOWER" ||
+      criterion.upperTail.operator !== "GREATER_THAN" || criterion.upperTail.tail !== "UPPER") {
+      context.addIssue({ code: "custom", path: ["centralCore", index], message: "Central-core criteria must use canonical order and strict outside tails." });
+    }
+    const expectedCoreLimits = [[6, 9], [176, 214], [8, 12], [7, 10], [7, 10]] as const;
+    if (criterion.lowerTail.referenceLimit !== expectedCoreLimits[index]![0] ||
+      criterion.upperTail.referenceLimit !== expectedCoreLimits[index]![1] ||
+      criterion.lowerTail.limit !== criterion.minInclusive ||
+      criterion.upperTail.limit !== criterion.maxInclusive) {
+      context.addIssue({ code: "custom", path: ["centralCore", index], message: "Central-core tail evidence must match its interval and frozen 15-number references." });
+    }
+    validateTailEvidence(criterion.lowerTail, ["centralCore", index, "lowerTail"]);
+    validateTailEvidence(criterion.upperTail, ["centralCore", index, "upperTail"]);
+    if (policy.betSize === 15 && (
+      criterion.minInclusive !== expectedCoreLimits[index]![0] ||
+      criterion.maxInclusive !== expectedCoreLimits[index]![1] ||
+      criterion.lowerTail.count !== criterion.lowerTail.referenceCount ||
+      criterion.upperTail.count !== criterion.upperTail.referenceCount ||
+      criterion.lowerTail.distanceNumerator !== 0 || criterion.upperTail.distanceNumerator !== 0
+    )) {
+      context.addIssue({ code: "custom", path: ["centralCore", index], message: "The 15-number core must remain identical to its frozen reference." });
+    }
+  });
+  if (policy.policyId !== `${LOTOFACIL_STRUCTURAL_POLICY_SET_ID}/${policy.betSize}`) {
+    context.addIssue({ code: "custom", path: ["policyId"], message: "policyId must identify betSize." });
+  }
+  if (policy.descriptiveMeanSum !== 13 * policy.betSize) {
+    context.addIssue({ code: "custom", path: ["descriptiveMeanSum"], message: "Mean sum must equal 13 times betSize." });
+  }
+  if (policy.universeSize !== expectedUniverseSizes[policy.betSize]) {
+    context.addIssue({ code: "custom", path: ["universeSize"], message: "universeSize must equal C(25, betSize)." });
+  }
+  const expectedAxisKeys = [
+    "ROWS:AXES_WITH_0", "ROWS:AXES_WITH_1", "ROWS:DEVIATION_NORMALIZED",
+    "COLUMNS:AXES_WITH_0", "COLUMNS:AXES_WITH_1", "COLUMNS:DEVIATION_NORMALIZED",
+  ];
+  policy.axisDistributions.forEach((distribution, index) => {
+    if (`${distribution.axis}:${distribution.metric}` !== expectedAxisKeys[index] ||
+      distribution.algorithmVersion !== "1.0.0" ||
+      distribution.betSize !== policy.betSize || distribution.totalOutcomes !== policy.universeSize ||
+      distribution.buckets.reduce((sum, bucket) => sum + bucket.occurrences, 0) !== policy.universeSize) {
+      context.addIssue({ code: "custom", path: ["axisDistributions", index], message: "Axis distributions must be canonical, unique, and reconciled." });
+    }
+    distribution.buckets.forEach((bucket, bucketIndex) => {
+      if (bucketIndex > 0) {
+        const previous = distribution.buckets[bucketIndex - 1]!;
+        const comparison = BigInt(previous.valueNumerator) * BigInt(bucket.valueDenominator) -
+          BigInt(bucket.valueNumerator) * BigInt(previous.valueDenominator);
+        if (comparison >= 0n) {
+          context.addIssue({ code: "custom", path: ["axisDistributions", index, "buckets", bucketIndex], message: "Axis distribution buckets must use strictly increasing exact values." });
+        }
+      }
+    });
+  });
+  for (let metricIndex = 0; metricIndex < 3; metricIndex += 1) {
+    const rows = policy.axisDistributions[metricIndex]!;
+    const columns = policy.axisDistributions[metricIndex + 3]!;
+    if (JSON.stringify(rows.buckets) !== JSON.stringify(columns.buckets)) {
+      context.addIssue({ code: "custom", path: ["axisDistributions"], message: "Row and column theoretical distributions must remain symmetric." });
+    }
+  }
+  if (policy.auxiliaryOperationalPolicyApplicable !== (policy.betSize === 15)) {
+    context.addIssue({ code: "custom", path: ["auxiliaryOperationalPolicyApplicable"], message: "The operational auxiliary policy applies only to betSize 15." });
+  }
+});
+
+export const lotofacilStructuralPolicySchema = lotofacilStructuralPolicyBaseSchema.safeExtend({
+  artifactHash: structuralArtifactHashSchema,
+}).strict();
+export type LotofacilStructuralPolicy = z.infer<typeof lotofacilStructuralPolicySchema>;
+
+const structuralMassCellSchema = z.object({
+  count: z.number().int().nonnegative().safe(),
+  universeSize: z.number().int().positive().safe(),
+  frequency: canonicalExactFractionSchema,
+}).strict();
+const structuralRuleMassSchema = structuralMassCellSchema.extend({ ruleId: structuralRuleIdSchema }).strict();
+const structuralExtremeCountMassSchema = structuralMassCellSchema.extend({
+  extremeCount: z.number().int().min(0).max(10),
+}).strict();
+const structuralBandMassSchema = structuralMassCellSchema.extend({ band: structuralBandSchema }).strict();
+const structuralCoreCriterionMassSchema = structuralMassCellSchema.extend({
+  metric: structuralCoreMetricSchema,
+}).strict();
+const structuralBandCoreMassSchema = structuralMassCellSchema.extend({
+  band: structuralBandSchema,
+  isCentralCore: z.boolean(),
+}).strict();
+
+const lotofacilStructuralMassBaseSchema = z.object({
+  contractVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION),
+  artifactSchemaVersion: z.literal(LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION),
+  canonicalSerializationVersion: z.literal(LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION),
+  policySetId: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_ID),
+  policySetVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION),
+  policyId: z.string().regex(/^lotofacil-structural-policy\/(15|16|17|18|19|20)$/),
+  policyVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_VERSION),
+  classifierVersion: z.literal(LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION),
+  massAlgorithmVersion: z.literal(LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION),
+  metricEngineVersion: z.literal("1.0.0"),
+  axisOccupancyAlgorithmVersion: z.literal("1.0.0"),
+  lotteryId: z.literal("lotofacil"),
+  lotteryDefinitionVersion: z.literal("1.0.0"),
+  betSize: structuralBetSizeSchema,
+  universeSize: z.number().int().positive().safe(),
+  enumeration: z.literal("INTEGRAL"),
+  ruleMasses: z.array(structuralRuleMassSchema).length(10),
+  extremeCountMasses: z.array(structuralExtremeCountMassSchema).length(11),
+  bandMasses: z.array(structuralBandMassSchema).length(5),
+  centralCoreCriterionMasses: z.array(structuralCoreCriterionMassSchema).length(5),
+  centralCoreMass: structuralMassCellSchema,
+  bandByCentralCoreMasses: z.array(structuralBandCoreMassSchema).length(10),
+  historyUsed: z.literal(false),
+  samplingUsed: z.literal(false),
+  probabilityClaimed: z.literal(false),
+  reconciled: z.literal(true),
+}).strict().superRefine((mass, context) => {
+  const expectedUniverseSizes: Record<number, number> = {
+    15: 3_268_760, 16: 2_042_975, 17: 1_081_575,
+    18: 480_700, 19: 177_100, 20: 53_130,
+  };
+  const validateCell = (cell: { count: number; universeSize: number; frequency: ExactFraction }, path: (string | number)[]): void => {
+    const divisor = structuralGreatestCommonDivisor(cell.count, mass.universeSize);
+    if (cell.count > mass.universeSize || cell.universeSize !== mass.universeSize ||
+      cell.frequency.numerator !== cell.count / divisor ||
+      cell.frequency.denominator !== mass.universeSize / divisor) {
+      context.addIssue({ code: "custom", path, message: "Mass cell must be the reduced exact count over universeSize." });
+    }
+  };
+  if (mass.universeSize !== expectedUniverseSizes[mass.betSize] ||
+    mass.policyId !== `${LOTOFACIL_STRUCTURAL_POLICY_SET_ID}/${mass.betSize}`) {
+    context.addIssue({ code: "custom", message: "Mass identity must match its exact universe." });
+  }
+  mass.ruleMasses.forEach((cell, index) => {
+    if (cell.ruleId !== `E${index + 1}`) context.addIssue({ code: "custom", path: ["ruleMasses", index], message: "Rule masses must use E1-E10 order." });
+    validateCell(cell, ["ruleMasses", index]);
+  });
+  mass.extremeCountMasses.forEach((cell, index) => {
+    if (cell.extremeCount !== index) context.addIssue({ code: "custom", path: ["extremeCountMasses", index], message: "Extreme-count masses must use 0-10 order." });
+    validateCell(cell, ["extremeCountMasses", index]);
+  });
+  mass.bandMasses.forEach((cell, index) => {
+    if (cell.band !== STRUCTURAL_BAND_ORDER[index]) context.addIssue({ code: "custom", path: ["bandMasses", index], message: "Band masses must use canonical order." });
+    validateCell(cell, ["bandMasses", index]);
+  });
+  mass.centralCoreCriterionMasses.forEach((cell, index) => {
+    const expected = ["EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT", "CONSECUTIVE_PAIR_COUNT"];
+    if (cell.metric !== expected[index]) context.addIssue({ code: "custom", path: ["centralCoreCriterionMasses", index], message: "Core masses must use canonical order." });
+    validateCell(cell, ["centralCoreCriterionMasses", index]);
+  });
+  validateCell(mass.centralCoreMass, ["centralCoreMass"]);
+  mass.bandByCentralCoreMasses.forEach((cell, index) => {
+    const expectedBand = STRUCTURAL_BAND_ORDER[Math.floor(index / 2)];
+    const expectedCore = index % 2 === 1;
+    if (cell.band !== expectedBand || cell.isCentralCore !== expectedCore) {
+      context.addIssue({ code: "custom", path: ["bandByCentralCoreMasses", index], message: "Band/core crossing must use canonical band,false,true order." });
+    }
+    validateCell(cell, ["bandByCentralCoreMasses", index]);
+  });
+  const extremeTotal = mass.extremeCountMasses.reduce((sum, cell) => sum + cell.count, 0);
+  const bandTotal = mass.bandMasses.reduce((sum, cell) => sum + cell.count, 0);
+  const crossTotal = mass.bandByCentralCoreMasses.reduce((sum, cell) => sum + cell.count, 0);
+  const fourPlus = mass.extremeCountMasses.slice(4).reduce((sum, cell) => sum + cell.count, 0);
+  const crossCore = mass.bandByCentralCoreMasses.filter((cell) => cell.isCentralCore).reduce((sum, cell) => sum + cell.count, 0);
+  const weightedExtremeTotal = mass.extremeCountMasses.reduce(
+    (sum, cell) => sum + cell.extremeCount * cell.count, 0,
+  );
+  const individualRuleTotal = mass.ruleMasses.reduce((sum, cell) => sum + cell.count, 0);
+  const bandsMatchCounts = mass.bandMasses.every((cell, index) => cell.count ===
+    (index < 4 ? mass.extremeCountMasses[index]!.count : fourPlus));
+  const crossingsMatchBands = mass.bandMasses.every((cell, index) =>
+    mass.bandByCentralCoreMasses[index * 2]!.count +
+    mass.bandByCentralCoreMasses[index * 2 + 1]!.count === cell.count);
+  if (extremeTotal !== mass.universeSize || bandTotal !== mass.universeSize ||
+    crossTotal !== mass.universeSize || fourPlus !== mass.bandMasses[4]?.count ||
+    crossCore !== mass.centralCoreMass.count || weightedExtremeTotal !== individualRuleTotal ||
+    !bandsMatchCounts || !crossingsMatchBands) {
+    context.addIssue({ code: "custom", message: "Structural mass reconciliation failed." });
+  }
+});
+
+export const lotofacilStructuralMassArtifactSchema = lotofacilStructuralMassBaseSchema.safeExtend({
+  artifactHash: structuralArtifactHashSchema,
+}).strict();
+export type LotofacilStructuralMassArtifact = z.infer<
+  typeof lotofacilStructuralMassArtifactSchema
+>;
+
+const structuralArtifactReferenceSchema = z.object({
+  betSize: structuralBetSizeSchema,
+  policyId: z.string().regex(/^lotofacil-structural-policy\/(15|16|17|18|19|20)$/),
+  policyVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_VERSION),
+  policyHash: structuralArtifactHashSchema,
+  massHash: structuralArtifactHashSchema,
+}).strict();
+const lotofacilStructuralPolicySetIndexBaseSchema = z.object({
+  contractVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION),
+  artifactSchemaVersion: z.literal(LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION),
+  canonicalSerializationVersion: z.literal(LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION),
+  policySetId: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_ID),
+  policySetVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION),
+  formulaVersion: z.literal(LOTOFACIL_STRUCTURAL_FORMULA_VERSION),
+  classifierVersion: z.literal(LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION),
+  massAlgorithmVersion: z.literal(LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION),
+  references: z.array(structuralArtifactReferenceSchema).length(6),
+  historyUsed: z.literal(false),
+  samplingUsed: z.literal(false),
+  probabilityClaimed: z.literal(false),
+}).strict();
+export const lotofacilStructuralPolicySetIndexSchema = lotofacilStructuralPolicySetIndexBaseSchema.extend({
+  artifactHash: structuralArtifactHashSchema,
+}).strict().superRefine((index, context) => {
+  const betSizes = [15, 16, 17, 18, 19, 20];
+  index.references.forEach((reference, referenceIndex) => {
+    if (reference.betSize !== betSizes[referenceIndex] ||
+      reference.policyId !== `${LOTOFACIL_STRUCTURAL_POLICY_SET_ID}/${reference.betSize}`) {
+      context.addIssue({ code: "custom", path: ["references", referenceIndex], message: "References must use canonical betSize order and identity." });
+    }
+  });
+});
+export type LotofacilStructuralPolicySetIndex = z.infer<
+  typeof lotofacilStructuralPolicySetIndexSchema
+>;
+
+export const lotofacilStructuralPolicySetSchema = z.object({
+  contractVersion: z.literal(LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION),
+  formulaVersion: z.literal(LOTOFACIL_STRUCTURAL_FORMULA_VERSION),
+  combinationVisits: z.literal(LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS),
+  policies: z.array(lotofacilStructuralPolicySchema).length(6),
+  masses: z.array(lotofacilStructuralMassArtifactSchema).length(6),
+  index: lotofacilStructuralPolicySetIndexSchema,
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  partial: z.literal(false),
+}).strict().superRefine((set, context) => {
+  const betSizes = [15, 16, 17, 18, 19, 20];
+  set.policies.forEach((policy, index) => {
+    const mass = set.masses[index];
+    const reference = set.index.references[index];
+    if (policy.betSize !== betSizes[index] || mass?.betSize !== policy.betSize ||
+      reference?.betSize !== policy.betSize || reference.policyHash !== policy.artifactHash ||
+      reference.massHash !== mass.artifactHash || mass.policyId !== policy.policyId) {
+      context.addIssue({ code: "custom", path: ["policies", index], message: "Policy, mass, and index references must agree in canonical order." });
+    }
+  });
+});
+export type LotofacilStructuralPolicySet = z.infer<typeof lotofacilStructuralPolicySetSchema>;
+
+const structuralProgressFields = {
+  type: z.literal("progress"),
+  processedWork: z.number().int().nonnegative().safe(),
+  totalWork: z.number().int().nonnegative().safe(),
+  overallProcessedWork: z.number().int().nonnegative().safe(),
+  overallTotalWork: z.literal(LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS),
+  percent: z.number().int().min(0).max(100),
+  overallPercent: z.number().int().min(0).max(100),
+};
+export const lotofacilStructuralPolicyProgressSchema = z.discriminatedUnion("phase", [
+  z.object({ ...structuralProgressFields, phase: z.literal("BUILD_EXACT_DISTRIBUTIONS"), betSize: structuralBetSizeSchema }).strict(),
+  z.object({ ...structuralProgressFields, phase: z.literal("BUILD_CLASSIFIED_MASSES"), betSize: structuralBetSizeSchema }).strict(),
+  z.object({ ...structuralProgressFields, phase: z.literal("FINALIZE_ARTIFACTS"), betSize: z.null() }).strict(),
+]).superRefine((progress, context) => {
+  if (progress.processedWork > progress.totalWork || progress.overallProcessedWork > progress.overallTotalWork) {
+    context.addIssue({ code: "custom", message: "Structural policy progress exceeds declared work." });
+  }
+  const percent = progress.totalWork === 0 ? 100 : Math.floor(progress.processedWork * 100 / progress.totalWork);
+  const overallPercent = Math.floor(progress.overallProcessedWork * 100 / progress.overallTotalWork);
+  if (progress.percent !== percent || progress.overallPercent !== overallPercent) {
+    context.addIssue({ code: "custom", message: "Structural policy progress percentages are inconsistent." });
+  }
+  const universeByBetSize: Record<number, number> = {
+    15: 3_268_760, 16: 2_042_975, 17: 1_081_575,
+    18: 480_700, 19: 177_100, 20: 53_130,
+  };
+  if (progress.phase === "FINALIZE_ARTIFACTS") {
+    if (progress.totalWork !== 13 || ![0, 13].includes(progress.processedWork) ||
+      progress.overallProcessedWork !== LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS) {
+      context.addIssue({ code: "custom", message: "Finalization reports 0 or 13 artifacts and never adds combination visits." });
+    }
+    return;
+  }
+  const universeSize = universeByBetSize[progress.betSize]!;
+  const priorUniverse = [15, 16, 17, 18, 19, 20]
+    .filter((betSize) => betSize < progress.betSize)
+    .reduce((sum, betSize) => sum + universeByBetSize[betSize]!, 0);
+  const phaseBase = progress.phase === "BUILD_CLASSIFIED_MASSES"
+    ? LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS / 2
+    : 0;
+  if (progress.totalWork !== universeSize ||
+    progress.overallProcessedWork !== phaseBase + priorUniverse + progress.processedWork) {
+    context.addIssue({ code: "custom", message: "Progress counters must reconcile exactly by phase and betSize." });
+  }
+});
+export type LotofacilStructuralPolicyProgress = z.infer<
+  typeof lotofacilStructuralPolicyProgressSchema
+>;

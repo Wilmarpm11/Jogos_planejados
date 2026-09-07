@@ -1,5 +1,18 @@
 export type CombinationVisitor = (combination: readonly number[]) => void;
 
+export interface AsyncCombinationVisitOptions {
+  readonly signal?: AbortSignal;
+  readonly batchSize?: number;
+  readonly onBatch?: (processedCombinations: number, totalCombinations: number) => void;
+}
+
+export class CombinationIterationCancelledError extends Error {
+  constructor() {
+    super("Combination iteration cancelled.");
+    this.name = "AbortError";
+  }
+}
+
 export type CombinationRanker = (combination: readonly number[]) => number;
 
 export const INTERSECTION_CARDINALITY_ALGORITHM_VERSION =
@@ -137,6 +150,54 @@ export function forEachCombination(
     if (position < 0) {
       return;
     }
+
+    combination[position] = combination[position]! + 1;
+    for (let index = position + 1; index < selectionSize; index += 1) {
+      combination[index] = combination[index - 1]! + 1;
+    }
+  }
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Asynchronously visits the same canonical sequence as forEachCombination.
+ * The backing array is reused, while bounded yields allow cooperative SIGINT
+ * handling without storing the combination universe.
+ */
+export async function forEachCombinationAsync(
+  totalItems: number,
+  selectionSize: number,
+  visitor: CombinationVisitor,
+  options: AsyncCombinationVisitOptions = {},
+): Promise<number> {
+  const totalCombinations = binomialCoefficient(totalItems, selectionSize);
+  const batchSize = options.batchSize ?? 4_096;
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new Error("The asynchronous combination batch size must be a positive safe integer.");
+  }
+  if (options.signal?.aborted) throw new CombinationIterationCancelledError();
+
+  const combination = Array.from({ length: selectionSize }, (_, index) => index);
+  let processedCombinations = 0;
+  while (true) {
+    visitor(combination);
+    processedCombinations += 1;
+
+    let position = selectionSize - 1;
+    while (position >= 0 && combination[position] === totalItems - selectionSize + position) {
+      position -= 1;
+    }
+    const finished = position < 0;
+
+    if (processedCombinations % batchSize === 0 || finished) {
+      options.onBatch?.(processedCombinations, totalCombinations);
+      if (!finished) await yieldToEventLoop();
+      if (options.signal?.aborted) throw new CombinationIterationCancelledError();
+    }
+    if (finished) return processedCombinations;
 
     combination[position] = combination[position]! + 1;
     for (let index = position + 1; index < selectionSize; index += 1) {

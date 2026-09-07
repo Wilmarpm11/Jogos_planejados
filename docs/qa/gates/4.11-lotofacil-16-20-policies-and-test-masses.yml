@@ -1,0 +1,73 @@
+schema: 1
+story: '4.11'
+story_title: 'Políticas e massas estruturais Lotofácil 16–20'
+gate: PASS
+status_reason: 'Os AC 1–14 estão cobertos; derivação exata, massas, serialização, operação e regressões passaram, e os Minors documentais foram corrigidos.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'base:f04a9ecce4df946850a58cbd62d0bfeb380966dc + worktree uncommitted'
+updated: '2026-09-07T15:21:55Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-21T15:21:55Z'
+evidence:
+  tests_reviewed: 28
+  focused_tests_passed: 28
+  regression_tests_passed: 252
+  test_files_passed: 27
+  checks:
+    - 'npm run lint'
+    - 'npm run typecheck'
+    - 'npm test'
+    - 'npx vitest run tests/lotofacil/structural-policies-16-20.test.ts'
+    - 'git diff --check'
+    - 'revisão AIOX Architect'
+    - 'revisão AIOX QA independente'
+  benchmark:
+    observed_duration_ms: 24374
+    combination_visits: 14208480
+    maximum_resident_set_bytes: 120160256
+    index_hash: 'sha256:3a607dbb863e5dbdc92d00cce3efd93455afcc344626c3d9aa6bc97e1decc141'
+    sla_claimed: false
+  fixture:
+    bytes: 205425
+    sha256: 'f64fd32bb00953a9b7dcff2d0b3159c8816b06fb17b6f7c9624c851fb9b710c1'
+  oracle:
+    production_imports: 0
+    oracle_total_visits: 14208480
+    derivation_visits: 7104240
+    mass_visits: 7104240
+    telemetry_separated: true
+  coderabbit:
+    status: PASS
+    critical_findings: 0
+    major_findings: 0
+    minor_findings: 0
+    unresolved_documentation_findings: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    ac_gaps: []
+risk_summary:
+  totals:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 0
+  highest_score: 0
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Execução local, schemas estritos e ausência de rede, histórico, credenciais, persistência, IPC ou UI.'
+  performance:
+    status: PASS
+    notes: 'Duas passagens produtivas totalizam exatamente 14.208.480 visitas; benchmark concluiu em 24.374 ms com memória proporcional aos agregadores.'
+  reliability:
+    status: PASS
+    notes: 'Oráculo independente, fixture congelada, frações exatas, hashes determinísticos, progresso e cancelamento/130 foram verificados sem resultado parcial.'
+  maintainability:
+    status: PASS
+    notes: 'Primitivas 2.1–2.5 foram reutilizadas, a API v1 de 15 permanece congelada e a extensão v2 é explicitamente versionada.'
+recommendations:
+  immediate: []
+  future: []
