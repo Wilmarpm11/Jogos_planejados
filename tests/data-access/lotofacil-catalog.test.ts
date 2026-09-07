@@ -64,6 +64,24 @@ describe("Lotofácil catalog snapshot", () => {
     expect(lotofacilCatalogSchema.safeParse({ ...catalog, bolaoLimits: limitsWithoutBetSize18 }).success).toBe(false);
   });
 
+  it("keeps nested catalog entries strict and validates the share interval", () => {
+    const catalog = parseLotofacilCaixaCatalog(page);
+    expect(lotofacilCatalogSchema.safeParse({
+      ...catalog,
+      priceByBetSize: [
+        { ...catalog.priceByBetSize[0]!, unknown: true },
+        ...catalog.priceByBetSize.slice(1),
+      ],
+    }).success).toBe(false);
+    expect(lotofacilCatalogSchema.safeParse({
+      ...catalog,
+      bolaoLimits: [
+        { ...catalog.bolaoLimits[0]!, minShares: 10, maxShares: 9 },
+        ...catalog.bolaoLimits.slice(1),
+      ],
+    }).success).toBe(false);
+  });
+
   it("rejects duplicate prize tiers when a supported tier is missing", () => {
     const catalog = parseLotofacilCaixaCatalog(page);
 

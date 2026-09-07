@@ -3,12 +3,23 @@ import {
   intersectionCardinality,
 } from "@boloes/combinatorics";
 import {
+  OPERATIONAL_COST_FEE_SCALE_BPS,
+  OPERATIONAL_COST_MAXIMUM_FEE_BPS,
+  IncompatibleOperationalCostCatalogError,
+  InvalidQuotaIdsError,
+  InvalidServiceFeeBpsError,
+  OperationalCostMonetaryOverflowError,
+  QuotaCountOutsideCaixaLimitsError,
+  ZeroValueQuotaError,
   PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM,
   PORTFOLIO_DIVERSITY_OPTIMIZATION_ALGORITHM_VERSION,
   PORTFOLIO_DIVERSITY_OPTIMIZATION_CONTRACT_VERSION,
   portfolioDiversityOptimizationProgressSchema,
   portfolioDiversityOptimizationRequestSchema,
   portfolioDiversityOptimizationResultSchema,
+  type OperationalCostAndQuotasCalculationInput,
+  type OperationalCostAndQuotasCalculationResult,
+  type OperationalCostAndQuotasAdapter,
   type PortfolioDiversityOptimizationAdapter,
   type PortfolioDiversityOptimizationErrorCode,
   type PortfolioDiversityOptimizationProgress,
@@ -547,4 +558,100 @@ export async function optimizePortfolioDiversity(
     matrixWork,
     selectionWork,
   );
+}
+
+function assertOperationalCostSafeInteger(value: bigint): number {
+  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new OperationalCostMonetaryOverflowError();
+  }
+  return Number(value);
+}
+
+/** Calculates one transient result through a lottery-owned normalization boundary. */
+export function calculateOperationalCostAndQuotas<TContext, TResult>(
+  input: unknown,
+  adapter: OperationalCostAndQuotasAdapter<TContext, TResult>,
+): TResult {
+  const prepared = adapter.prepare(input);
+  const calculation = calculateOperationalCostAndQuotaAllocation(prepared.calculation);
+  const result = adapter.buildResult(prepared, calculation);
+  return adapter.validateResult(prepared, result);
+}
+
+/** Pure modality-neutral integer calculation used after adapter preflight. */
+export function calculateOperationalCostAndQuotaAllocation(
+  input: OperationalCostAndQuotasCalculationInput,
+): OperationalCostAndQuotasCalculationResult {
+  if (
+    !Number.isSafeInteger(input.occurrenceCount) ||
+    input.occurrenceCount <= 0 ||
+    !Number.isSafeInteger(input.unitPriceCents) ||
+    input.unitPriceCents <= 0
+  ) {
+    throw new OperationalCostMonetaryOverflowError();
+  }
+  if (
+    !Number.isInteger(input.feeBps) ||
+    input.feeBps < 0 ||
+    input.feeBps > OPERATIONAL_COST_MAXIMUM_FEE_BPS
+  ) {
+    throw new InvalidServiceFeeBpsError();
+  }
+  if (
+    input.quotaIds.length === 0 ||
+    input.quotaIds.some((quotaId) => !Number.isSafeInteger(quotaId) || quotaId <= 0) ||
+    new Set(input.quotaIds).size !== input.quotaIds.length
+  ) {
+    throw new InvalidQuotaIdsError();
+  }
+  if (
+    !Number.isSafeInteger(input.minShares) ||
+    input.minShares <= 0 ||
+    !Number.isSafeInteger(input.maxShares) ||
+    input.maxShares < input.minShares
+  ) {
+    throw new IncompatibleOperationalCostCatalogError();
+  }
+
+  const quotaCount = input.quotaIds.length;
+  if (
+    quotaCount < input.minShares ||
+    quotaCount > input.maxShares
+  ) {
+    throw new QuotaCountOutsideCaixaLimitsError();
+  }
+
+  const officialCost = BigInt(input.occurrenceCount) * BigInt(input.unitPriceCents);
+  const feeNumerator = officialCost * BigInt(input.feeBps);
+  const feeScale = BigInt(OPERATIONAL_COST_FEE_SCALE_BPS);
+  const feeCentsBigInt = feeNumerator / feeScale +
+    (2n * (feeNumerator % feeScale) >= feeScale ? 1n : 0n);
+  const totalCentsBigInt = officialCost + feeCentsBigInt;
+  const quotaCountBigInt = BigInt(quotaCount);
+  const baseQuotaCentsBigInt = totalCentsBigInt / quotaCountBigInt;
+  const remainderCentsBigInt = totalCentsBigInt % quotaCountBigInt;
+
+  const officialCostCents = assertOperationalCostSafeInteger(officialCost);
+  const feeCents = assertOperationalCostSafeInteger(feeCentsBigInt);
+  const totalCents = assertOperationalCostSafeInteger(totalCentsBigInt);
+  const baseQuotaCents = assertOperationalCostSafeInteger(baseQuotaCentsBigInt);
+  const remainderCents = assertOperationalCostSafeInteger(remainderCentsBigInt);
+  if (baseQuotaCents === 0) throw new ZeroValueQuotaError();
+
+  const quotaIds = [...input.quotaIds].sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0
+  );
+
+  return {
+    officialCostCents,
+    feeCents,
+    totalCents,
+    baseQuotaCents,
+    remainderCents,
+    quotas: quotaIds.map((quotaId, index) => ({
+      quotaId,
+      valueCents: baseQuotaCents + (index < remainderCents ? 1 : 0),
+      receivedRemainderCent: index < remainderCents,
+    })),
+  };
 }

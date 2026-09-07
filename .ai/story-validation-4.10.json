@@ -1,0 +1,33 @@
+{
+  "story": "4.10",
+  "path": "docs/stories/4.10.lotofacil-operational-cost-and-quotas.story.md",
+  "contractPath": "docs/architecture/lotofacil-operational-cost-and-quotas-contract.md",
+  "validatedAt": "2026-09-05",
+  "validators": ["@architect", "@po"],
+  "architectureVerdict": "PASS",
+  "verdict": "GO",
+  "score": 9,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "requirementsTraceability": "PASS",
+    "architectureAlignment": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "errorContract": "PASS",
+    "numericSafety": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "notes": [
+    "feeBps omitido normaliza para zero e valores fornecidos aceitam somente inteiros de 0 a 10000.",
+    "A base comprada é uma união discriminada exclusiva entre SOURCE_BETS e EXPANDED_SIMPLE_BETS.",
+    "A ordenação ASCII bytewise é exclusiva da Story 4.10 e não altera o comparador da Story 4.9.",
+    "Persistência, pagamento, UI, IPC e as Stories 4.11/4.12 permanecem fora do escopo."
+  ]
+}

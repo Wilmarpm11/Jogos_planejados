@@ -68,6 +68,7 @@ import {
   lotofacilCanonicalBetExpansionAdapter,
   lotofacilPortfolioStructuralDistributionAdapter,
   lotofacilPortfolioDiversityOptimizationAdapter,
+  lotofacilOperationalCostAndQuotasAdapter,
   lotofacilExactCoverageAdapter,
   LOTOFACIL_DEFINITION,
   summarizeLotofacilStructuralProfile,
@@ -76,11 +77,15 @@ import {
   summarizeLotofacilStructuralAllocation,
 } from "@boloes/lottery-lotofacil";
 import { exactCoverageAuditErrorRecord, exactCoverageAuditExitCode } from "./coverage-errors.js";
-import { optimizePortfolioDiversity } from "@boloes/portfolio-engine";
+import {
+  calculateOperationalCostAndQuotas,
+  optimizePortfolioDiversity,
+} from "@boloes/portfolio-engine";
 import {
   portfolioDiversityOptimizationErrorRecord,
   portfolioDiversityOptimizationExitCode,
 } from "./portfolio-diversity-errors.js";
+import { operationalCostAndQuotasErrorRecord } from "./operational-cost-and-quotas-errors.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -132,6 +137,8 @@ Comandos:
                        Gera candidatos Lotofácil localmente, sem persistir, cobrir ou congelar carteira.
   portfolio optimize-diversity --input PATH
                        Seleciona um subconjunto Lotofácil determinístico com progresso e cancelamento locais.
+  portfolio calculate-cost-and-quotas --input PATH
+                       Calcula custo e rateio transitórios da carteira efetivamente comprada.
   portfolio audit-basic --input PATH
                        Audita validade, duplicidade e frequências sem persistir ou calcular cobertura.
   portfolio audit-intersections --input PATH
@@ -551,6 +558,25 @@ if (command === "help" || command === "--help" || command === "-h") {
       process.exitCode = portfolioDiversityOptimizationExitCode(error);
     } finally {
       process.off("SIGINT", cancelOnSigint);
+    }
+  }
+} else if (command === "portfolio" && process.argv[3] === "calculate-cost-and-quotas") {
+  const inputPath = argumentValue("--input");
+  if (!inputPath) {
+    process.stderr.write(JSON.stringify(operationalCostAndQuotasErrorRecord(
+      new Error("Informe --input com a solicitação de custo e cotas."),
+    )) + "\n");
+    process.exitCode = 1;
+  } else {
+    try {
+      const result = calculateOperationalCostAndQuotas(
+        JSON.parse(readFileSync(resolve(inputPath), "utf8")),
+        lotofacilOperationalCostAndQuotasAdapter,
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch (error) {
+      process.stderr.write(JSON.stringify(operationalCostAndQuotasErrorRecord(error)) + "\n");
+      process.exitCode = 1;
     }
   }
 } else if (command === "portfolio" && process.argv[3] === "audit-basic") {
