@@ -19,6 +19,25 @@ import {
   InvalidPurchasedCostBetError,
   InvalidQuotaIdsError,
   InvalidServiceFeeBpsError,
+  LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION,
+  LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION,
+  LOTOFACIL_STRUCTURAL_CANCELLATION_BATCH_SIZE,
+  LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION,
+  LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM,
+  LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM_VERSION,
+  LOTOFACIL_STRUCTURAL_FORMULA_VERSION,
+  LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION,
+  LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS,
+  LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION,
+  LOTOFACIL_STRUCTURAL_POLICY_SET_ID,
+  LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION,
+  LOTOFACIL_STRUCTURAL_POLICY_VERSION,
+  LOTOFACIL_STRUCTURAL_PROGRESS_INTERVAL,
+  StructuralArtifactHashMismatchError,
+  StructuralMassReconciliationFailedError,
+  StructuralPolicyBuildCancelledError,
+  StructuralPolicyDependencyMismatchError,
+  StructuralPolicyLimitDerivationFailedError,
   UnsupportedOperationalCostLotteryError,
   type AxisName,
   type AxisOccupancy,
@@ -57,17 +76,29 @@ import {
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
   lotofacilCatalogRecordSchema,
+  lotofacilStructuralMassArtifactSchema,
+  lotofacilStructuralPolicyProgressSchema,
+  lotofacilStructuralPolicySchema,
+  lotofacilStructuralPolicySetIndexSchema,
+  lotofacilStructuralPolicySetSchema,
+  type LotofacilStructuralMassArtifact,
+  type LotofacilStructuralPolicy,
+  type LotofacilStructuralPolicyProgress,
+  type LotofacilStructuralPolicySet,
 } from "@boloes/lottery-contracts";
 import {
   binomialCoefficient,
+  CombinationIterationCancelledError,
   createCombinationRanker,
   forEachCombination,
+  forEachCombinationAsync,
 } from "@boloes/combinatorics";
 import {
   CONTRACT_VERSION,
   HASH_ALGORITHM,
   HASH_VERSION,
 } from "@boloes/domain-core";
+import { createHash } from "node:crypto";
 
 function deepFreeze<T extends object>(value: T): T {
   for (const nestedValue of Object.values(value as Record<string, unknown>)) {
@@ -240,7 +271,7 @@ const lotofacilAllocationBand: Readonly<Record<(typeof LOTOFACIL_STRUCTURAL_ALLO
 /** Pure comparison reference: requested allocation against the neutral mass. */
 export function summarizeLotofacilStructuralAllocation(allocation: Readonly<Record<string, number>>) {
   validateLotofacilStructuralAllocation(allocation);
-  const mass = calculateLotofacilStructuralMass();
+  const mass = LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT;
   return LOTOFACIL_STRUCTURAL_ALLOCATION_KEYS.map((key) => ({
     key,
     requestedPercent: allocation[key],
@@ -704,6 +735,76 @@ export const LOTOFACIL_CENTRAL_CORE_LIMITS = deepFreeze({
   consecutivePairCount: { min: 7, max: 10 },
 } as const);
 
+type LotofacilPolicyMetricId =
+  | "EVEN_COUNT"
+  | "SUM"
+  | "BORDER_COUNT"
+  | "LOW_01_TO_13_COUNT"
+  | "CONSECUTIVE_PAIR_COUNT"
+  | "MAX_CONSECUTIVE_RUN"
+  | "SEQUENCE_COUNT"
+  | "AMPLITUDE"
+  | "ROW_DEVIATION_NORMALIZED"
+  | "COLUMN_DEVIATION_NORMALIZED";
+
+interface InternalPolicyTail {
+  readonly operator: "LESS_THAN" | "LESS_THAN_OR_EQUAL" | "GREATER_THAN" | "GREATER_THAN_OR_EQUAL";
+  readonly numerator: number;
+  readonly denominator: number;
+}
+
+interface InternalRulePolicy {
+  readonly ruleId: LotofacilExtremeRuleId;
+  readonly metric: LotofacilPolicyMetricId;
+  readonly tails: readonly InternalPolicyTail[];
+}
+
+interface InternalCentralCorePolicy {
+  readonly metric: Exclude<LotofacilPolicyMetricId,
+    "MAX_CONSECUTIVE_RUN" | "SEQUENCE_COUNT" | "AMPLITUDE" |
+    "ROW_DEVIATION_NORMALIZED" | "COLUMN_DEVIATION_NORMALIZED">;
+  readonly minInclusive: number;
+  readonly maxInclusive: number;
+}
+
+interface InternalStructuralPolicy {
+  readonly betSize: LotofacilBetSize;
+  readonly classifierVersion: string;
+  readonly rules: readonly InternalRulePolicy[];
+  readonly centralCore: readonly InternalCentralCorePolicy[];
+}
+
+function asInternalTail(
+  operator: InternalPolicyTail["operator"],
+  value: number,
+): InternalPolicyTail {
+  return { operator, numerator: value, denominator: 1 };
+}
+
+const LOTOFACIL_LEGACY_INTERNAL_POLICY = deepFreeze({
+  betSize: 15,
+  classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION,
+  rules: [
+    { ruleId: "E1", metric: "EVEN_COUNT", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E1.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E1.atLeast)] },
+    { ruleId: "E2", metric: "SUM", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E2.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E2.atLeast)] },
+    { ruleId: "E3", metric: "BORDER_COUNT", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E3.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E3.atLeast)] },
+    { ruleId: "E4", metric: "LOW_01_TO_13_COUNT", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E4.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E4.atLeast)] },
+    { ruleId: "E5", metric: "CONSECUTIVE_PAIR_COUNT", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E5.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E5.atLeast)] },
+    { ruleId: "E6", metric: "MAX_CONSECUTIVE_RUN", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E6.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E6.atLeast)] },
+    { ruleId: "E7", metric: "SEQUENCE_COUNT", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E7.atMost), asInternalTail("GREATER_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E7.atLeast)] },
+    { ruleId: "E8", metric: "AMPLITUDE", tails: [asInternalTail("LESS_THAN_OR_EQUAL", LOTOFACIL_EXTREME_RULE_LIMITS.E8.atMost)] },
+    { ruleId: "E9", metric: "ROW_DEVIATION_NORMALIZED", tails: [{ operator: "GREATER_THAN_OR_EQUAL", numerator: LOTOFACIL_EXTREME_RULE_LIMITS.E9.deviationAtLeast, denominator: 15 }] },
+    { ruleId: "E10", metric: "COLUMN_DEVIATION_NORMALIZED", tails: [{ operator: "GREATER_THAN_OR_EQUAL", numerator: LOTOFACIL_EXTREME_RULE_LIMITS.E10.deviationAtLeast, denominator: 15 }] },
+  ],
+  centralCore: [
+    { metric: "EVEN_COUNT", minInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.min, maxInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.max },
+    { metric: "SUM", minInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.sum.min, maxInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.sum.max },
+    { metric: "BORDER_COUNT", minInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.min, maxInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.max },
+    { metric: "LOW_01_TO_13_COUNT", minInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.min, maxInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.max },
+    { metric: "CONSECUTIVE_PAIR_COUNT", minInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.min, maxInclusive: LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.max },
+  ],
+} satisfies InternalStructuralPolicy);
+
 export const LOTOFACIL_AXIS_AUXILIARY_POLICY = deepFreeze({
   applicableBetSize: 15,
   priority: ["VERY_RARE", "RARE", "ATTENTION", "NONE"] as const,
@@ -852,6 +953,47 @@ function increment(histogram: Map<number, number>, value: number): void {
   histogram.set(value, (histogram.get(value) ?? 0) + 1);
 }
 
+interface LotofacilAxisDistributionAccumulator {
+  readonly rowEmpty: Map<number, number>;
+  readonly rowSingleton: Map<number, number>;
+  readonly rowDeviationNormalized: Map<number, number>;
+  readonly columnEmpty: Map<number, number>;
+  readonly columnSingleton: Map<number, number>;
+  readonly columnDeviationNormalized: Map<number, number>;
+  totalOutcomes: number;
+}
+
+function createAxisDistributionAccumulator(): LotofacilAxisDistributionAccumulator {
+  return {
+    rowEmpty: initializeHistogram(),
+    rowSingleton: initializeHistogram(),
+    rowDeviationNormalized: initializeHistogram(),
+    columnEmpty: initializeHistogram(),
+    columnSingleton: initializeHistogram(),
+    columnDeviationNormalized: initializeHistogram(),
+    totalOutcomes: 0,
+  };
+}
+
+function observeAxisDistribution(
+  accumulator: LotofacilAxisDistributionAccumulator,
+  occupancy: LotofacilAxisOccupancyProfile,
+): void {
+  increment(accumulator.rowEmpty, occupancy.rows.axesWith[0]);
+  increment(accumulator.rowSingleton, occupancy.rows.axesWith[1]);
+  increment(
+    accumulator.rowDeviationNormalized,
+    axisDeviationNumerator(occupancy.rows.counts, occupancy.betSize),
+  );
+  increment(accumulator.columnEmpty, occupancy.columns.axesWith[0]);
+  increment(accumulator.columnSingleton, occupancy.columns.axesWith[1]);
+  increment(
+    accumulator.columnDeviationNormalized,
+    axisDeviationNumerator(occupancy.columns.counts, occupancy.betSize),
+  );
+  accumulator.totalOutcomes += 1;
+}
+
 function histogramBuckets(
   histogram: ReadonlyMap<number, number>,
   denominator: number,
@@ -884,6 +1026,39 @@ function distribution(
   };
 }
 
+function finalizeAxisDistributionProfile(
+  betSize: LotofacilBetSize,
+  accumulator: LotofacilAxisDistributionAccumulator,
+): LotofacilTheoreticalAxisProfile {
+  const totalOutcomes = accumulator.totalOutcomes;
+  const normalizedDenominator = 5 * betSize;
+  return {
+    betSize,
+    algorithmVersion: LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION,
+    totalOutcomes,
+    distributions: [
+      distribution(betSize, "ROWS", "AXES_WITH_0", totalOutcomes, histogramBuckets(accumulator.rowEmpty, 1)),
+      distribution(betSize, "ROWS", "AXES_WITH_1", totalOutcomes, histogramBuckets(accumulator.rowSingleton, 1)),
+      distribution(
+        betSize,
+        "ROWS",
+        "DEVIATION_NORMALIZED",
+        totalOutcomes,
+        histogramBuckets(accumulator.rowDeviationNormalized, normalizedDenominator),
+      ),
+      distribution(betSize, "COLUMNS", "AXES_WITH_0", totalOutcomes, histogramBuckets(accumulator.columnEmpty, 1)),
+      distribution(betSize, "COLUMNS", "AXES_WITH_1", totalOutcomes, histogramBuckets(accumulator.columnSingleton, 1)),
+      distribution(
+        betSize,
+        "COLUMNS",
+        "DEVIATION_NORMALIZED",
+        totalOutcomes,
+        histogramBuckets(accumulator.columnDeviationNormalized, normalizedDenominator),
+      ),
+    ],
+  };
+}
+
 /**
  * Enumerates C(25, betSize) without sampling. The integer histograms retain
  * exact outcome counts; fractional values are represented as integer ratios.
@@ -896,12 +1071,7 @@ export function calculateLotofacilTheoreticalAxisProfile(
     return cached;
   }
 
-  const rowEmpty = initializeHistogram();
-  const rowSingleton = initializeHistogram();
-  const rowDeviationNormalized = initializeHistogram();
-  const columnEmpty = initializeHistogram();
-  const columnSingleton = initializeHistogram();
-  const columnDeviationNormalized = initializeHistogram();
+  const accumulator = createAxisDistributionAccumulator();
   const selected = Array.from({ length: betSize }, (_, index) => index);
   let totalOutcomes = 0;
 
@@ -915,14 +1085,11 @@ export function calculateLotofacilTheoreticalAxisProfile(
       columns[columnIndex] = columns[columnIndex]! + 1;
     }
 
-    const row = axisOccupancy(rows, betSize);
-    const column = axisOccupancy(columns, betSize);
-    increment(rowEmpty, row.axesWith[0]);
-    increment(rowSingleton, row.axesWith[1]);
-    increment(rowDeviationNormalized, axisDeviationNumerator(rows, betSize));
-    increment(columnEmpty, column.axesWith[0]);
-    increment(columnSingleton, column.axesWith[1]);
-    increment(columnDeviationNormalized, axisDeviationNumerator(columns, betSize));
+    observeAxisDistribution(accumulator, {
+      betSize,
+      rows: axisOccupancy(rows, betSize),
+      columns: axisOccupancy(columns, betSize),
+    });
     totalOutcomes += 1;
 
     let position = betSize - 1;
@@ -938,32 +1105,10 @@ export function calculateLotofacilTheoreticalAxisProfile(
     }
   }
 
-  const normalizedDenominator = 5 * betSize;
-  const profile: LotofacilTheoreticalAxisProfile = {
-    betSize,
-    algorithmVersion: LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION,
-    totalOutcomes,
-    distributions: [
-      distribution(betSize, "ROWS", "AXES_WITH_0", totalOutcomes, histogramBuckets(rowEmpty, 1)),
-      distribution(betSize, "ROWS", "AXES_WITH_1", totalOutcomes, histogramBuckets(rowSingleton, 1)),
-      distribution(
-        betSize,
-        "ROWS",
-        "DEVIATION_NORMALIZED",
-        totalOutcomes,
-        histogramBuckets(rowDeviationNormalized, normalizedDenominator),
-      ),
-      distribution(betSize, "COLUMNS", "AXES_WITH_0", totalOutcomes, histogramBuckets(columnEmpty, 1)),
-      distribution(betSize, "COLUMNS", "AXES_WITH_1", totalOutcomes, histogramBuckets(columnSingleton, 1)),
-      distribution(
-        betSize,
-        "COLUMNS",
-        "DEVIATION_NORMALIZED",
-        totalOutcomes,
-        histogramBuckets(columnDeviationNormalized, normalizedDenominator),
-      ),
-    ],
-  };
+  if (totalOutcomes !== accumulator.totalOutcomes) {
+    throw new Error("Lotofacil axis distribution accumulator lost outcomes.");
+  }
+  const profile = finalizeAxisDistributionProfile(betSize, accumulator);
   cachedTheoreticalProfiles.set(betSize, profile);
   return profile;
 }
@@ -1116,59 +1261,64 @@ function nonApplicableRules(): Readonly<Record<LotofacilExtremeRuleId, Structura
   };
 }
 
-function extremeRulesForSimpleBet(
-  metrics: LotofacilCoreMetrics,
-  axisOccupancy: LotofacilAxisOccupancyProfile,
+function metricValueForPolicy(
+  profile: LotofacilMetricProfile,
+  metric: LotofacilPolicyMetricId,
+): ExactFraction {
+  switch (metric) {
+    case "EVEN_COUNT": return { numerator: profile.metrics.evenCount, denominator: 1 };
+    case "SUM": return { numerator: profile.metrics.sum, denominator: 1 };
+    case "BORDER_COUNT": return { numerator: profile.metrics.borderCount, denominator: 1 };
+    case "LOW_01_TO_13_COUNT": return { numerator: profile.metrics.lowCount, denominator: 1 };
+    case "CONSECUTIVE_PAIR_COUNT": return { numerator: profile.metrics.consecutivePairCount, denominator: 1 };
+    case "MAX_CONSECUTIVE_RUN": return { numerator: profile.metrics.maxConsecutiveRun, denominator: 1 };
+    case "SEQUENCE_COUNT": return { numerator: profile.metrics.sequenceCount, denominator: 1 };
+    case "AMPLITUDE": return { numerator: profile.metrics.amplitude, denominator: 1 };
+    case "ROW_DEVIATION_NORMALIZED": return profile.axisOccupancy.rows.deviationNormalized;
+    case "COLUMN_DEVIATION_NORMALIZED": return profile.axisOccupancy.columns.deviationNormalized;
+  }
+}
+
+function matchesPolicyTail(value: ExactFraction, tail: InternalPolicyTail): boolean {
+  const comparison =
+    BigInt(value.numerator) * BigInt(tail.denominator) -
+    BigInt(tail.numerator) * BigInt(value.denominator);
+  switch (tail.operator) {
+    case "LESS_THAN": return comparison < 0n;
+    case "LESS_THAN_OR_EQUAL": return comparison <= 0n;
+    case "GREATER_THAN": return comparison > 0n;
+    case "GREATER_THAN_OR_EQUAL": return comparison >= 0n;
+  }
+}
+
+function classifyRulesWithPolicy(
+  profile: LotofacilMetricProfile,
+  policy: InternalStructuralPolicy,
 ): Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>> {
-  if (axisOccupancy.betSize !== 15) {
+  if (profile.betSize !== policy.betSize) {
+    throw new StructuralPolicyDependencyMismatchError(
+      `Policy betSize ${policy.betSize} cannot classify betSize ${profile.betSize}.`,
+    );
+  }
+  return Object.fromEntries(policy.rules.map((rule) => [
+    rule.ruleId,
+    {
+      applicable: true,
+      isExtreme: rule.tails.some((tail) => matchesPolicyTail(
+        metricValueForPolicy(profile, rule.metric),
+        tail,
+      )),
+    },
+  ])) as Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>>;
+}
+
+function extremeRulesForSimpleBet(
+  profile: LotofacilMetricProfile,
+): Readonly<Record<LotofacilExtremeRuleId, StructuralRuleFlag>> {
+  if (profile.betSize !== 15) {
     return nonApplicableRules();
   }
-
-  const rule = (isExtreme: boolean): StructuralRuleFlag => ({
-    applicable: true,
-    isExtreme,
-  });
-  return {
-    E1: rule(
-      metrics.evenCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E1.atMost ||
-        metrics.evenCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E1.atLeast,
-    ),
-    E2: rule(
-      metrics.sum <= LOTOFACIL_EXTREME_RULE_LIMITS.E2.atMost ||
-        metrics.sum >= LOTOFACIL_EXTREME_RULE_LIMITS.E2.atLeast,
-    ),
-    E3: rule(
-      metrics.borderCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E3.atMost ||
-        metrics.borderCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E3.atLeast,
-    ),
-    E4: rule(
-      metrics.lowCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E4.atMost ||
-        metrics.lowCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E4.atLeast,
-    ),
-    E5: rule(
-      metrics.consecutivePairCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E5.atMost ||
-        metrics.consecutivePairCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E5.atLeast,
-    ),
-    E6: rule(
-      metrics.maxConsecutiveRun <= LOTOFACIL_EXTREME_RULE_LIMITS.E6.atMost ||
-        metrics.maxConsecutiveRun >= LOTOFACIL_EXTREME_RULE_LIMITS.E6.atLeast,
-    ),
-    E7: rule(
-      metrics.sequenceCount <= LOTOFACIL_EXTREME_RULE_LIMITS.E7.atMost ||
-        metrics.sequenceCount >= LOTOFACIL_EXTREME_RULE_LIMITS.E7.atLeast,
-    ),
-    E8: rule(metrics.amplitude <= LOTOFACIL_EXTREME_RULE_LIMITS.E8.atMost),
-    E9: rule(
-      axisOccupancy.rows.deviation.numerator >=
-        LOTOFACIL_EXTREME_RULE_LIMITS.E9.deviationAtLeast *
-          axisOccupancy.rows.deviation.denominator,
-    ),
-    E10: rule(
-      axisOccupancy.columns.deviation.numerator >=
-        LOTOFACIL_EXTREME_RULE_LIMITS.E10.deviationAtLeast *
-          axisOccupancy.columns.deviation.denominator,
-    ),
-  };
+  return classifyRulesWithPolicy(profile, LOTOFACIL_LEGACY_INTERNAL_POLICY);
 }
 
 function auxiliaryAxisSignal(
@@ -1224,7 +1374,7 @@ export function classifyLotofacilStructuralProfile(
 ): LotofacilStructuralClassification {
   return {
     classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION,
-    extremeRules: extremeRulesForSimpleBet(profile.metrics, profile.axisOccupancy),
+    extremeRules: extremeRulesForSimpleBet(profile),
     auxiliaryAxisSignals: {
       rows: auxiliaryAxisSignal(profile.axisOccupancy.rows, profile.betSize),
       columns: auxiliaryAxisSignal(profile.axisOccupancy.columns, profile.betSize),
@@ -1255,6 +1405,51 @@ function structuralBand(extremeCount: number): StructuralBand {
   return "FOUR_PLUS_EXTREMES";
 }
 
+function centralCoreCriteriaWithPolicy(
+  profile: LotofacilMetricProfile,
+  policy: InternalStructuralPolicy,
+): NonNullable<LotofacilStructuralSummary["centralCoreCriteria"]> {
+  const entries = policy.centralCore.map((criterion) => {
+    const value = metricValueForPolicy(profile, criterion.metric).numerator;
+    const key = criterion.metric === "EVEN_COUNT" ? "evenCount"
+      : criterion.metric === "SUM" ? "sum"
+        : criterion.metric === "BORDER_COUNT" ? "borderCount"
+          : criterion.metric === "LOW_01_TO_13_COUNT" ? "lowCount"
+            : "consecutivePairCount";
+    return [key, value >= criterion.minInclusive && value <= criterion.maxInclusive] as const;
+  });
+  return Object.fromEntries(entries) as NonNullable<LotofacilStructuralSummary["centralCoreCriteria"]>;
+}
+
+function summarizeWithPolicy(
+  profile: LotofacilMetricProfile,
+  classification: LotofacilStructuralClassification,
+  policy: InternalStructuralPolicy,
+  requireClassifierVersion = true,
+): LotofacilStructuralSummary {
+  if (profile.betSize !== policy.betSize ||
+    requireClassifierVersion && classification.classifierVersion !== policy.classifierVersion) {
+    throw new StructuralPolicyDependencyMismatchError(
+      "Structural profile, classification, and policy versions must agree.",
+    );
+  }
+  const rules = policy.rules.map((rule) => classification.extremeRules[rule.ruleId]);
+  if (rules.some((rule) => !rule.applicable || rule.isExtreme === null)) {
+    throw new StructuralPolicyDependencyMismatchError(
+      "An applicable policy requires all E1-E10 rule flags.",
+    );
+  }
+  const extremeCount = rules.filter((rule) => rule.isExtreme).length;
+  const centralCoreCriteria = centralCoreCriteriaWithPolicy(profile, policy);
+  return {
+    applicable: true,
+    extremeCount,
+    band: structuralBand(extremeCount),
+    isCentralCore: Object.values(centralCoreCriteria).every(Boolean),
+    centralCoreCriteria,
+  };
+}
+
 /**
  * Consolidates previously calculated rules. It does not recalculate E1–E10
  * and auxiliary occupancy signals are deliberately excluded.
@@ -1273,37 +1468,7 @@ export function summarizeLotofacilStructuralProfile(
     };
   }
 
-  const rules = Object.values(classification.extremeRules);
-  if (rules.some((rule) => !rule.applicable || rule.isExtreme === null)) {
-    throw new Error("A simple Lotofácil bet requires all E1–E10 rules to be applicable.");
-  }
-  const extremeCount = rules.filter((rule) => rule.isExtreme).length;
-  const metrics = profile.metrics;
-  const centralCoreCriteria = {
-    evenCount:
-      metrics.evenCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.min &&
-      metrics.evenCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount.max,
-    sum:
-      metrics.sum >= LOTOFACIL_CENTRAL_CORE_LIMITS.sum.min &&
-      metrics.sum <= LOTOFACIL_CENTRAL_CORE_LIMITS.sum.max,
-    borderCount:
-      metrics.borderCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.min &&
-      metrics.borderCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount.max,
-    lowCount:
-      metrics.lowCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.min &&
-      metrics.lowCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount.max,
-    consecutivePairCount:
-      metrics.consecutivePairCount >= LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.min &&
-      metrics.consecutivePairCount <= LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount.max,
-  };
-
-  return {
-    applicable: true,
-    extremeCount,
-    band: structuralBand(extremeCount),
-    isCentralCore: Object.values(centralCoreCriteria).every(Boolean),
-    centralCoreCriteria,
-  };
+  return summarizeWithPolicy(profile, classification, LOTOFACIL_LEGACY_INTERNAL_POLICY, false);
 }
 
 /** Lotofácil-only bridge used by the generic structural distribution audit. */
@@ -1555,5 +1720,897 @@ export function getLotofacilCanonicalFormulaManifest(): LotofacilCanonicalFormul
       portfolioGameOrdering: "LOCALE_COMPARE_OF_COMMA_JOINED_CANONICAL_GAMES",
     },
     exclusions: ["HISTORY", "RESULTS", "STRATEGY", "GENERATION", "COVERAGE", "PERSISTENCE"],
+  };
+}
+
+const STRUCTURAL_RULE_IDS = [
+  "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
+] as const;
+const STRUCTURAL_CORE_METRICS = [
+  "EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT", "CONSECUTIVE_PAIR_COUNT",
+] as const;
+const STRUCTURAL_RULE_METRICS: readonly LotofacilPolicyMetricId[] = [
+  "EVEN_COUNT", "SUM", "BORDER_COUNT", "LOW_01_TO_13_COUNT",
+  "CONSECUTIVE_PAIR_COUNT", "MAX_CONSECUTIVE_RUN", "SEQUENCE_COUNT", "AMPLITUDE",
+  "ROW_DEVIATION_NORMALIZED", "COLUMN_DEVIATION_NORMALIZED",
+];
+
+type ScalarStructuralMetric = Exclude<LotofacilPolicyMetricId,
+  "ROW_DEVIATION_NORMALIZED" | "COLUMN_DEVIATION_NORMALIZED">;
+
+interface LotofacilStructuralDistributionSet {
+  readonly betSize: LotofacilBetSize;
+  readonly scalar: Readonly<Record<ScalarStructuralMetric, Map<number, number>>>;
+  readonly axisAccumulator: LotofacilAxisDistributionAccumulator;
+  axisProfile?: LotofacilTheoreticalAxisProfile;
+  totalOutcomes: number;
+}
+
+function createScalarHistograms(): Record<ScalarStructuralMetric, Map<number, number>> {
+  return {
+    EVEN_COUNT: new Map(),
+    SUM: new Map(),
+    BORDER_COUNT: new Map(),
+    LOW_01_TO_13_COUNT: new Map(),
+    CONSECUTIVE_PAIR_COUNT: new Map(),
+    MAX_CONSECUTIVE_RUN: new Map(),
+    SEQUENCE_COUNT: new Map(),
+    AMPLITUDE: new Map(),
+  };
+}
+
+function createStructuralDistributionSet(
+  betSize: LotofacilBetSize,
+): LotofacilStructuralDistributionSet {
+  return {
+    betSize,
+    scalar: createScalarHistograms(),
+    axisAccumulator: createAxisDistributionAccumulator(),
+    totalOutcomes: 0,
+  };
+}
+
+function scalarMetricValue(
+  metrics: LotofacilCoreMetrics,
+  metric: ScalarStructuralMetric,
+): number {
+  switch (metric) {
+    case "EVEN_COUNT": return metrics.evenCount;
+    case "SUM": return metrics.sum;
+    case "BORDER_COUNT": return metrics.borderCount;
+    case "LOW_01_TO_13_COUNT": return metrics.lowCount;
+    case "CONSECUTIVE_PAIR_COUNT": return metrics.consecutivePairCount;
+    case "MAX_CONSECUTIVE_RUN": return metrics.maxConsecutiveRun;
+    case "SEQUENCE_COUNT": return metrics.sequenceCount;
+    case "AMPLITUDE": return metrics.amplitude;
+  }
+}
+
+function observeStructuralDistribution(
+  distributions: LotofacilStructuralDistributionSet,
+  profile: LotofacilMetricProfile,
+): void {
+  for (const metric of Object.keys(distributions.scalar) as ScalarStructuralMetric[]) {
+    increment(distributions.scalar[metric], scalarMetricValue(profile.metrics, metric));
+  }
+  observeAxisDistribution(distributions.axisAccumulator, profile.axisOccupancy);
+  distributions.totalOutcomes += 1;
+}
+
+function absoluteBigInt(value: bigint): bigint {
+  return value < 0n ? -value : value;
+}
+
+function fractionForCount(count: number, universeSize: number): ExactFraction {
+  return reduceFraction(count, universeSize);
+}
+
+function supportValues(histogram: ReadonlyMap<number, number>): readonly number[] {
+  return [...histogram.keys()].sort((left, right) => left - right);
+}
+
+function tailCount(
+  histogram: ReadonlyMap<number, number>,
+  candidate: number,
+  operator: "LESS_THAN" | "LESS_THAN_OR_EQUAL" | "GREATER_THAN" | "GREATER_THAN_OR_EQUAL",
+): number {
+  let count = 0;
+  for (const [value, occurrences] of histogram) {
+    if (
+      (operator === "LESS_THAN" && value < candidate) ||
+      (operator === "LESS_THAN_OR_EQUAL" && value <= candidate) ||
+      (operator === "GREATER_THAN" && value > candidate) ||
+      (operator === "GREATER_THAN_OR_EQUAL" && value >= candidate)
+    ) count += occurrences;
+  }
+  return count;
+}
+
+interface SelectedTail {
+  readonly limit: number;
+  readonly count: number;
+  readonly distanceNumerator: number;
+}
+
+function selectScalarTail(
+  histogram: ReadonlyMap<number, number>,
+  universeSize: number,
+  referenceCount: number,
+  referenceUniverseSize: number,
+  operator: "LESS_THAN" | "LESS_THAN_OR_EQUAL" | "GREATER_THAN" | "GREATER_THAN_OR_EQUAL",
+  residualTie: "LOWER_LIMIT" | "HIGHER_LIMIT",
+  tiePolicy: "EXTREME_MIN_COUNT" | "CORE_NARROW_LIMIT" = "EXTREME_MIN_COUNT",
+): SelectedTail {
+  let selected: SelectedTail | undefined;
+  for (const limit of supportValues(histogram)) {
+    const count = tailCount(histogram, limit, operator);
+    const distance = absoluteBigInt(
+      BigInt(count) * BigInt(referenceUniverseSize) -
+      BigInt(referenceCount) * BigInt(universeSize),
+    );
+    const distanceNumerator = Number(distance);
+    if (!Number.isSafeInteger(distanceNumerator)) {
+      throw new StructuralPolicyLimitDerivationFailedError("Tail distance exceeds the safe public integer range.");
+    }
+    if (
+      !selected ||
+      distanceNumerator < selected.distanceNumerator ||
+      (distanceNumerator === selected.distanceNumerator && tiePolicy === "EXTREME_MIN_COUNT" && count < selected.count) ||
+      (distanceNumerator === selected.distanceNumerator &&
+        (tiePolicy === "CORE_NARROW_LIMIT" || count === selected.count) &&
+        (residualTie === "LOWER_LIMIT" ? limit < selected.limit : limit > selected.limit))
+    ) selected = { limit, count, distanceNumerator };
+  }
+  if (!selected) throw new StructuralPolicyLimitDerivationFailedError("No exact support candidate exists.");
+  return selected;
+}
+
+function scalarTailEvidence(
+  selected: SelectedTail,
+  universeSize: number,
+  referenceLimit: number,
+  referenceCount: number,
+  referenceUniverseSize: number,
+  tail: "LOWER" | "UPPER",
+  operator: "LESS_THAN" | "LESS_THAN_OR_EQUAL" | "GREATER_THAN" | "GREATER_THAN_OR_EQUAL",
+) {
+  return {
+    tail,
+    operator,
+    limit: selected.limit,
+    count: selected.count,
+    frequency: fractionForCount(selected.count, universeSize),
+    referenceBetSize: 15 as const,
+    referenceLimit,
+    referenceCount,
+    referenceFrequency: fractionForCount(referenceCount, referenceUniverseSize),
+    distanceNumerator: selected.distanceNumerator,
+  };
+}
+
+function findAxisDistribution(
+  profile: LotofacilTheoreticalAxisProfile,
+  axis: AxisName,
+  metric: AxisOccupancyMetric,
+): TheoreticalAxisDistribution {
+  const found = profile.distributions.find(
+    (candidate) => candidate.axis === axis && candidate.metric === metric,
+  );
+  if (!found) throw new StructuralPolicyDependencyMismatchError("Required axis distribution is absent.");
+  return found;
+}
+
+function compareBucketValue(
+  left: TheoreticalDistributionBucket,
+  rightNumerator: number,
+  rightDenominator: number,
+): bigint {
+  return BigInt(left.valueNumerator) * BigInt(rightDenominator) -
+    BigInt(rightNumerator) * BigInt(left.valueDenominator);
+}
+
+function axisUpperTailCount(
+  distribution: TheoreticalAxisDistribution,
+  numerator: number,
+  denominator: number,
+): number {
+  return distribution.buckets.reduce(
+    (count, bucket) => count +
+      (compareBucketValue(bucket, numerator, denominator) >= 0n ? bucket.occurrences : 0),
+    0,
+  );
+}
+
+function selectAxisUpperTail(
+  distribution: TheoreticalAxisDistribution,
+  referenceCount: number,
+  referenceUniverseSize: number,
+): { limit: ExactFraction; count: number; distanceNumerator: number } {
+  let selected: { limit: ExactFraction; count: number; distanceNumerator: number } | undefined;
+  for (const bucket of distribution.buckets) {
+    const limit = reduceFraction(bucket.valueNumerator, bucket.valueDenominator);
+    const count = axisUpperTailCount(distribution, limit.numerator, limit.denominator);
+    const distanceNumerator = Number(absoluteBigInt(
+      BigInt(count) * BigInt(referenceUniverseSize) -
+      BigInt(referenceCount) * BigInt(distribution.totalOutcomes),
+    ));
+    const isHigherLimit = selected &&
+      BigInt(limit.numerator) * BigInt(selected.limit.denominator) >
+      BigInt(selected.limit.numerator) * BigInt(limit.denominator);
+    if (
+      !selected ||
+      distanceNumerator < selected.distanceNumerator ||
+      (distanceNumerator === selected.distanceNumerator && count < selected.count) ||
+      (distanceNumerator === selected.distanceNumerator && count === selected.count && isHigherLimit)
+    ) selected = { limit, count, distanceNumerator };
+  }
+  if (!selected) throw new StructuralPolicyLimitDerivationFailedError("No normalized deviation candidate exists.");
+  return selected;
+}
+
+const LEGACY_SCALAR_LIMITS = [
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E1.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E1.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E2.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E2.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E3.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E3.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E4.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E4.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E5.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E5.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E6.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E6.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E7.atMost, upper: LOTOFACIL_EXTREME_RULE_LIMITS.E7.atLeast },
+  { lower: LOTOFACIL_EXTREME_RULE_LIMITS.E8.atMost },
+] as const;
+const LEGACY_CORE_LIMITS = [
+  LOTOFACIL_CENTRAL_CORE_LIMITS.evenCount,
+  LOTOFACIL_CENTRAL_CORE_LIMITS.sum,
+  LOTOFACIL_CENTRAL_CORE_LIMITS.borderCount,
+  LOTOFACIL_CENTRAL_CORE_LIMITS.lowCount,
+  LOTOFACIL_CENTRAL_CORE_LIMITS.consecutivePairCount,
+] as const;
+
+function deriveLotofacilStructuralPolicy(
+  distributions: LotofacilStructuralDistributionSet,
+  reference: LotofacilStructuralDistributionSet,
+): LotofacilStructuralPolicy {
+  const universeSize = distributions.totalOutcomes;
+  const referenceUniverseSize = reference.totalOutcomes;
+  const scalarRules = STRUCTURAL_RULE_IDS.slice(0, 8).map((ruleId, index) => {
+    const metric = STRUCTURAL_RULE_METRICS[index] as ScalarStructuralMetric;
+    const histogram = distributions.scalar[metric];
+    const referenceHistogram = reference.scalar[metric];
+    const limits = LEGACY_SCALAR_LIMITS[index]!;
+    const referenceLowerCount = tailCount(referenceHistogram, limits.lower, "LESS_THAN_OR_EQUAL");
+    const selectedLower = distributions.betSize === 15
+      ? { limit: limits.lower, count: referenceLowerCount, distanceNumerator: 0 }
+      : selectScalarTail(histogram, universeSize, referenceLowerCount, referenceUniverseSize, "LESS_THAN_OR_EQUAL", "LOWER_LIMIT");
+    const tails = [scalarTailEvidence(
+      selectedLower, universeSize, limits.lower, referenceLowerCount,
+      referenceUniverseSize, "LOWER", "LESS_THAN_OR_EQUAL",
+    )];
+    if ("upper" in limits) {
+      const referenceUpperCount = tailCount(referenceHistogram, limits.upper, "GREATER_THAN_OR_EQUAL");
+      const selectedUpper = distributions.betSize === 15
+        ? { limit: limits.upper, count: referenceUpperCount, distanceNumerator: 0 }
+        : selectScalarTail(histogram, universeSize, referenceUpperCount, referenceUniverseSize, "GREATER_THAN_OR_EQUAL", "HIGHER_LIMIT");
+      tails.push(scalarTailEvidence(
+        selectedUpper, universeSize, limits.upper, referenceUpperCount,
+        referenceUniverseSize, "UPPER", "GREATER_THAN_OR_EQUAL",
+      ));
+      if (selectedLower.limit >= selectedUpper.limit) {
+        throw new StructuralPolicyLimitDerivationFailedError(`${ruleId} derived overlapping limits.`);
+      }
+    }
+    return { ruleId, metric, tails };
+  });
+
+  const referenceAxisProfile = reference.axisProfile!;
+  const axisRules = (["ROWS", "COLUMNS"] as const).map((axis, axisIndex) => {
+    const distribution = findAxisDistribution(distributions.axisProfile!, axis, "DEVIATION_NORMALIZED");
+    const referenceDistribution = findAxisDistribution(referenceAxisProfile, axis, "DEVIATION_NORMALIZED");
+    const referenceCount = axisUpperTailCount(referenceDistribution, 8, 15);
+    const selected = distributions.betSize === 15
+      ? { limit: { numerator: 8, denominator: 15 }, count: referenceCount, distanceNumerator: 0 }
+      : selectAxisUpperTail(distribution, referenceCount, referenceUniverseSize);
+    return {
+      ruleId: STRUCTURAL_RULE_IDS[8 + axisIndex]!,
+      metric: STRUCTURAL_RULE_METRICS[8 + axisIndex]!,
+      tails: [{
+        tail: "UPPER" as const,
+        operator: "GREATER_THAN_OR_EQUAL" as const,
+        limit: selected.limit,
+        count: selected.count,
+        frequency: fractionForCount(selected.count, universeSize),
+        referenceBetSize: 15 as const,
+        referenceLimit: { numerator: 8, denominator: 15 },
+        referenceCount,
+        referenceFrequency: fractionForCount(referenceCount, referenceUniverseSize),
+        distanceNumerator: selected.distanceNumerator,
+      }],
+    };
+  });
+
+  const centralCore = STRUCTURAL_CORE_METRICS.map((metric, index) => {
+    const limits = LEGACY_CORE_LIMITS[index]!;
+    const histogram = distributions.scalar[metric];
+    const referenceHistogram = reference.scalar[metric];
+    const lowerReferenceCount = tailCount(referenceHistogram, limits.min, "LESS_THAN");
+    const upperReferenceCount = tailCount(referenceHistogram, limits.max, "GREATER_THAN");
+    const lower = distributions.betSize === 15
+      ? { limit: limits.min, count: lowerReferenceCount, distanceNumerator: 0 }
+      : selectScalarTail(
+        histogram, universeSize, lowerReferenceCount, referenceUniverseSize,
+        "LESS_THAN", "HIGHER_LIMIT", "CORE_NARROW_LIMIT",
+      );
+    const upper = distributions.betSize === 15
+      ? { limit: limits.max, count: upperReferenceCount, distanceNumerator: 0 }
+      : selectScalarTail(
+        histogram, universeSize, upperReferenceCount, referenceUniverseSize,
+        "GREATER_THAN", "LOWER_LIMIT", "CORE_NARROW_LIMIT",
+      );
+    if (lower.limit > upper.limit) {
+      throw new StructuralPolicyLimitDerivationFailedError(`${metric} derived an invalid central interval.`);
+    }
+    return {
+      metric,
+      minInclusive: lower.limit,
+      maxInclusive: upper.limit,
+      lowerTail: scalarTailEvidence(lower, universeSize, limits.min, lowerReferenceCount, referenceUniverseSize, "LOWER", "LESS_THAN"),
+      upperTail: scalarTailEvidence(upper, universeSize, limits.max, upperReferenceCount, referenceUniverseSize, "UPPER", "GREATER_THAN"),
+    };
+  });
+
+  const withoutHash = {
+    contractVersion: LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION,
+    artifactSchemaVersion: LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION,
+    canonicalSerializationVersion: LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION,
+    policySetId: LOTOFACIL_STRUCTURAL_POLICY_SET_ID,
+    policySetVersion: LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION,
+    policyId: `${LOTOFACIL_STRUCTURAL_POLICY_SET_ID}/${distributions.betSize}`,
+    policyVersion: LOTOFACIL_STRUCTURAL_POLICY_VERSION,
+    derivationAlgorithm: LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM,
+    derivationAlgorithmVersion: LOTOFACIL_STRUCTURAL_DERIVATION_ALGORITHM_VERSION,
+    classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION,
+    massAlgorithmVersion: LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION,
+    metricEngineVersion: LOTOFACIL_METRIC_ENGINE_VERSION,
+    axisOccupancyAlgorithmVersion: LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION,
+    lotteryId: LOTOFACIL_ID,
+    lotteryDefinitionVersion: LOTOFACIL_DEFINITION.version,
+    betSize: distributions.betSize,
+    universeSize,
+    descriptiveMeanSum: 13 * distributions.betSize,
+    rules: [...scalarRules, ...axisRules],
+    centralCore,
+    axisDistributions: distributions.axisProfile!.distributions,
+    auxiliaryOperationalPolicyApplicable: distributions.betSize === 15,
+    historyUsed: false as const,
+    samplingUsed: false as const,
+    probabilityClaimed: false as const,
+  };
+  return lotofacilStructuralPolicySchema.parse({
+    ...withoutHash,
+    artifactHash: calculateLotofacilStructuralArtifactHash(withoutHash),
+  });
+}
+
+function internalPolicyFromArtifact(policyInput: unknown): InternalStructuralPolicy {
+  const policy = lotofacilStructuralPolicySchema.parse(policyInput);
+  if (calculateLotofacilStructuralArtifactHash(
+    hashableArtifact(policy as unknown as Record<string, unknown>),
+  ) !== policy.artifactHash) {
+    throw new StructuralArtifactHashMismatchError("Structural policy hash mismatch.");
+  }
+  const toInternalTail = (tail: LotofacilStructuralPolicy["rules"][number]["tails"][number]): InternalPolicyTail => ({
+    operator: tail.operator,
+    numerator: typeof tail.limit === "number" ? tail.limit : tail.limit.numerator,
+    denominator: typeof tail.limit === "number" ? 1 : tail.limit.denominator,
+  });
+  return {
+    betSize: policy.betSize,
+    classifierVersion: policy.classifierVersion,
+    rules: policy.rules.map((rule) => ({
+      ruleId: rule.ruleId,
+      metric: rule.metric,
+      tails: rule.tails.map(toInternalTail),
+    })),
+    centralCore: policy.centralCore.map((criterion) => ({
+      metric: criterion.metric,
+      minInclusive: criterion.minInclusive,
+      maxInclusive: criterion.maxInclusive,
+    })),
+  };
+}
+
+export function classifyLotofacilStructuralProfileV2(
+  profile: LotofacilMetricProfile,
+  policyInput: unknown,
+): LotofacilStructuralClassification {
+  return createLotofacilStructuralClassifierV2(policyInput).classify(profile);
+}
+
+export function summarizeLotofacilStructuralProfileV2(
+  profile: LotofacilMetricProfile,
+  classification: LotofacilStructuralClassification,
+  policyInput: unknown,
+): LotofacilStructuralSummary {
+  return createLotofacilStructuralClassifierV2(policyInput).summarize(profile, classification);
+}
+
+export interface LotofacilStructuralClassifierV2 {
+  readonly policyId: string;
+  readonly policyVersion: string;
+  classify(profile: LotofacilMetricProfile): LotofacilStructuralClassification;
+  summarize(
+    profile: LotofacilMetricProfile,
+    classification: LotofacilStructuralClassification,
+  ): LotofacilStructuralSummary;
+}
+
+/** Resolves and verifies a policy once for exhaustive or repeated classification. */
+export function createLotofacilStructuralClassifierV2(
+  policyInput: unknown,
+): LotofacilStructuralClassifierV2 {
+  const artifact = lotofacilStructuralPolicySchema.parse(policyInput);
+  const policy = internalPolicyFromArtifact(artifact);
+  const assertCompatibleProfile = (profile: LotofacilMetricProfile): void => {
+    if (
+      profile.metricEngineVersion !== artifact.metricEngineVersion ||
+      !isLotofacilDefinition(profile.lotteryDefinition) ||
+      profile.lotteryDefinition.id !== artifact.lotteryId ||
+      profile.lotteryDefinition.version !== artifact.lotteryDefinitionVersion ||
+      profile.betSize !== artifact.betSize ||
+      profile.axisOccupancy.betSize !== artifact.betSize ||
+      profile.selectedNumbers.length !== artifact.betSize
+    ) {
+      throw new StructuralPolicyDependencyMismatchError(
+        "Structural profile identity and policy dependencies must agree.",
+      );
+    }
+  };
+  return {
+    policyId: artifact.policyId,
+    policyVersion: artifact.policyVersion,
+    classify(profile) {
+      assertCompatibleProfile(profile);
+      return {
+        classifierVersion: policy.classifierVersion,
+        extremeRules: classifyRulesWithPolicy(profile, policy),
+        auxiliaryAxisSignals: {
+          rows: auxiliaryAxisSignal(profile.axisOccupancy.rows, profile.betSize),
+          columns: auxiliaryAxisSignal(profile.axisOccupancy.columns, profile.betSize),
+        },
+      };
+    },
+    summarize(profile, classification) {
+      assertCompatibleProfile(profile);
+      return summarizeWithPolicy(profile, classification, policy);
+    },
+  };
+}
+
+function canonicalString(value: string): string {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!Number.isInteger(next) || next < 0xdc00 || next > 0xdfff) {
+        throw new TypeError("Canonical JSON rejects isolated Unicode surrogates.");
+      }
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      throw new TypeError("Canonical JSON rejects isolated Unicode surrogates.");
+    }
+  }
+  return JSON.stringify(value);
+}
+
+function compareUtf8(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+function serializeLotofacilStructuralCanonicalValue(
+  value: unknown,
+  ancestors: WeakSet<object>,
+): string {
+  if (value === null) return "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return canonicalString(value);
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || Object.is(value, -0)) {
+      throw new TypeError("Canonical JSON accepts only safe integers and rejects negative zero.");
+    }
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (ancestors.has(value)) throw new TypeError("Canonical JSON rejects cyclic values.");
+    const ownKeys = Reflect.ownKeys(value);
+    const expectedKeys = Array.from({ length: value.length }, (_, index) => String(index));
+    if (ownKeys.some((key) => typeof key !== "string") ||
+      ownKeys.filter((key) => key !== "length").some((key, index) => key !== expectedKeys[index]) ||
+      ownKeys.length !== expectedKeys.length + 1) {
+      throw new TypeError("Canonical JSON accepts only dense arrays without custom fields.");
+    }
+    ancestors.add(value);
+    try {
+      const items = expectedKeys.map((key) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !("value" in descriptor)) {
+          throw new TypeError("Canonical JSON accepts only dense arrays of data values.");
+        }
+        return serializeLotofacilStructuralCanonicalValue(descriptor.value, ancestors);
+      });
+      return `[${items.join(",")}]`;
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+  if (typeof value === "object") {
+    if (ancestors.has(value)) throw new TypeError("Canonical JSON rejects cyclic values.");
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Canonical JSON accepts only plain objects with Object or null prototypes.");
+    }
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key !== "string")) {
+      throw new TypeError("Canonical JSON rejects symbol-keyed fields.");
+    }
+    const entries = ownKeys.map((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key as string);
+      if (!descriptor?.enumerable || !("value" in descriptor)) {
+        throw new TypeError("Canonical JSON accepts only own enumerable data fields.");
+      }
+      return [key, descriptor.value] as [string, unknown];
+    });
+    if (entries.some(([, item]) => item === undefined)) {
+      throw new TypeError("Canonical JSON rejects explicitly undefined fields.");
+    }
+    entries.sort(([left], [right]) => compareUtf8(left, right));
+    ancestors.add(value);
+    try {
+      return `{${entries.map(([key, item]) =>
+        `${canonicalString(key)}:${serializeLotofacilStructuralCanonicalValue(item, ancestors)}`).join(",")}}`;
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+  throw new TypeError("Canonical JSON rejects unsupported values.");
+}
+
+export function serializeLotofacilStructuralCanonicalJson(value: unknown): string {
+  return serializeLotofacilStructuralCanonicalValue(value, new WeakSet());
+}
+
+export function calculateLotofacilStructuralArtifactHash(value: unknown): string {
+  const canonicalBytes = Buffer.from(serializeLotofacilStructuralCanonicalJson(value), "utf8");
+  return `sha256:${createHash("sha256").update(canonicalBytes).digest("hex")}`;
+}
+
+function hashableArtifact(artifact: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const withoutHash = { ...artifact };
+  delete withoutHash.artifactHash;
+  return withoutHash;
+}
+
+interface StructuralMassAccumulator {
+  readonly ruleCounts: number[];
+  readonly extremeCounts: number[];
+  readonly bandCounts: Record<StructuralBand, number>;
+  readonly coreCriterionCounts: number[];
+  centralCoreCount: number;
+  readonly bandCoreCounts: Record<string, number>;
+  totalOutcomes: number;
+}
+
+function createMassAccumulator(): StructuralMassAccumulator {
+  return {
+    ruleCounts: Array.from({ length: 10 }, () => 0),
+    extremeCounts: Array.from({ length: 11 }, () => 0),
+    bandCounts: Object.fromEntries(STRUCTURAL_BAND_ORDER.map((band) => [band, 0])) as Record<StructuralBand, number>,
+    coreCriterionCounts: Array.from({ length: 5 }, () => 0),
+    centralCoreCount: 0,
+    bandCoreCounts: Object.fromEntries(
+      STRUCTURAL_BAND_ORDER.flatMap((band) => [[`${band}:false`, 0], [`${band}:true`, 0]]),
+    ),
+    totalOutcomes: 0,
+  };
+}
+
+function observeMass(
+  accumulator: StructuralMassAccumulator,
+  classification: LotofacilStructuralClassification,
+  summary: LotofacilStructuralSummary,
+): void {
+  if (!summary.applicable || summary.extremeCount === null || summary.band === null ||
+      summary.isCentralCore === null || summary.centralCoreCriteria === null) {
+    throw new StructuralMassReconciliationFailedError("A v2 policy produced a non-applicable summary.");
+  }
+  STRUCTURAL_RULE_IDS.forEach((ruleId, index) => {
+    if (classification.extremeRules[ruleId].isExtreme) accumulator.ruleCounts[index]! += 1;
+  });
+  accumulator.extremeCounts[summary.extremeCount]! += 1;
+  accumulator.bandCounts[summary.band] += 1;
+  const criteria = Object.values(summary.centralCoreCriteria);
+  criteria.forEach((matches, index) => {
+    if (matches) accumulator.coreCriterionCounts[index]! += 1;
+  });
+  if (summary.isCentralCore) accumulator.centralCoreCount += 1;
+  accumulator.bandCoreCounts[`${summary.band}:${summary.isCentralCore}`]! += 1;
+  accumulator.totalOutcomes += 1;
+}
+
+function massCell(count: number, universeSize: number) {
+  return { count, universeSize, frequency: fractionForCount(count, universeSize) };
+}
+
+function finalizeStructuralMass(
+  policy: LotofacilStructuralPolicy,
+  accumulator: StructuralMassAccumulator,
+): LotofacilStructuralMassArtifact {
+  const universeSize = policy.universeSize;
+  const extremeTotal = accumulator.extremeCounts.reduce((sum, count) => sum + count, 0);
+  const bandTotal = STRUCTURAL_BAND_ORDER.reduce((sum, band) => sum + accumulator.bandCounts[band], 0);
+  const fourPlus = accumulator.extremeCounts.slice(4).reduce((sum, count) => sum + count, 0);
+  const crossTotal = Object.values(accumulator.bandCoreCounts).reduce((sum, count) => sum + count, 0);
+  const crossCore = STRUCTURAL_BAND_ORDER.reduce(
+    (sum, band) => sum + accumulator.bandCoreCounts[`${band}:true`]!, 0,
+  );
+  if (
+    accumulator.totalOutcomes !== universeSize || extremeTotal !== universeSize ||
+    bandTotal !== universeSize || fourPlus !== accumulator.bandCounts.FOUR_PLUS_EXTREMES ||
+    crossTotal !== universeSize || crossCore !== accumulator.centralCoreCount
+  ) throw new StructuralMassReconciliationFailedError();
+
+  const withoutHash = {
+    contractVersion: LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION,
+    artifactSchemaVersion: LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION,
+    canonicalSerializationVersion: LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION,
+    policySetId: LOTOFACIL_STRUCTURAL_POLICY_SET_ID,
+    policySetVersion: LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION,
+    policyId: policy.policyId,
+    policyVersion: policy.policyVersion,
+    classifierVersion: policy.classifierVersion,
+    massAlgorithmVersion: LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION,
+    metricEngineVersion: LOTOFACIL_METRIC_ENGINE_VERSION,
+    axisOccupancyAlgorithmVersion: LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION,
+    lotteryId: LOTOFACIL_ID,
+    lotteryDefinitionVersion: LOTOFACIL_DEFINITION.version,
+    betSize: policy.betSize,
+    universeSize,
+    enumeration: "INTEGRAL" as const,
+    ruleMasses: STRUCTURAL_RULE_IDS.map((ruleId, index) => ({ ruleId, ...massCell(accumulator.ruleCounts[index]!, universeSize) })),
+    extremeCountMasses: accumulator.extremeCounts.map((count, extremeCount) => ({ extremeCount, ...massCell(count, universeSize) })),
+    bandMasses: STRUCTURAL_BAND_ORDER.map((band) => ({ band, ...massCell(accumulator.bandCounts[band], universeSize) })),
+    centralCoreCriterionMasses: STRUCTURAL_CORE_METRICS.map((metric, index) => ({ metric, ...massCell(accumulator.coreCriterionCounts[index]!, universeSize) })),
+    centralCoreMass: massCell(accumulator.centralCoreCount, universeSize),
+    bandByCentralCoreMasses: STRUCTURAL_BAND_ORDER.flatMap((band) => [false, true].map((isCentralCore) => ({
+      band,
+      isCentralCore,
+      ...massCell(accumulator.bandCoreCounts[`${band}:${isCentralCore}`]!, universeSize),
+    }))),
+    historyUsed: false as const,
+    samplingUsed: false as const,
+    probabilityClaimed: false as const,
+    reconciled: true as const,
+  };
+  return lotofacilStructuralMassArtifactSchema.parse({
+    ...withoutHash,
+    artifactHash: calculateLotofacilStructuralArtifactHash(withoutHash),
+  });
+}
+
+export interface BuildLotofacilStructuralPolicySetOptions {
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: LotofacilStructuralPolicyProgress) => void;
+}
+
+function emitStructuralProgress(
+  options: BuildLotofacilStructuralPolicySetOptions,
+  phase: LotofacilStructuralPolicyProgress["phase"],
+  betSize: LotofacilBetSize | null,
+  processedWork: number,
+  totalWork: number,
+  overallProcessedWork: number,
+): void {
+  options.onProgress?.(lotofacilStructuralPolicyProgressSchema.parse({
+    type: "progress",
+    phase,
+    betSize,
+    processedWork,
+    totalWork,
+    overallProcessedWork,
+    overallTotalWork: LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS,
+    percent: totalWork === 0 ? 100 : Math.floor(processedWork * 100 / totalWork),
+    overallPercent: Math.floor(overallProcessedWork * 100 / LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS),
+  }));
+}
+
+function throwIfStructuralBuildCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new StructuralPolicyBuildCancelledError();
+}
+
+function preflightStructuralPolicyDependencies(): void {
+  const legacyManifest = getLotofacilCanonicalFormulaManifest();
+  const snapshotTotal = LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT.buckets.reduce(
+    (sum, bucket) => sum + bucket.occurrences,
+    0,
+  );
+  if (
+    LOTOFACIL_DEFINITION.id !== "lotofacil" || LOTOFACIL_DEFINITION.version !== "1.0.0" ||
+    LOTOFACIL_METRIC_ENGINE_VERSION !== "1.0.0" ||
+    LOTOFACIL_AXIS_OCCUPANCY_ALGORITHM_VERSION !== "1.0.0" ||
+    LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION !== "1.0.0" ||
+    LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION !== "1.0.0" ||
+    LOTOFACIL_CANONICAL_FORMULA_VERSION !== "1.0.0" ||
+    LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT.algorithmVersion !== LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION ||
+    LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT.betSize !== 15 ||
+    LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT.totalOutcomes !== LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE ||
+    snapshotTotal !== LOTOFACIL_SIMPLE_BET_UNIVERSE_SIZE ||
+    legacyManifest.formulaVersion !== LOTOFACIL_CANONICAL_FORMULA_VERSION ||
+    legacyManifest.structuralClassification.classifierVersion !== LOTOFACIL_STRUCTURAL_CLASSIFIER_VERSION ||
+    legacyManifest.structuralMass.algorithmVersion !== LOTOFACIL_STRUCTURAL_MASS_ALGORITHM_VERSION
+  ) {
+    throw new StructuralPolicyDependencyMismatchError(
+      "Stories 2.1-2.5 structural dependencies are unavailable or incompatible.",
+    );
+  }
+}
+
+export async function buildLotofacilStructuralPolicySet(
+  options: BuildLotofacilStructuralPolicySetOptions = {},
+): Promise<LotofacilStructuralPolicySet> {
+  throwIfStructuralBuildCancelled(options.signal);
+  preflightStructuralPolicyDependencies();
+
+  const distributionSets = new Map<LotofacilBetSize, LotofacilStructuralDistributionSet>();
+  let overallProcessedWork = 0;
+  try {
+    for (const betSize of LOTOFACIL_SUPPORTED_BET_SIZES) {
+      const set = createStructuralDistributionSet(betSize);
+      const universeSize = binomialCoefficient(25, betSize);
+      let lastProgress = 0;
+      emitStructuralProgress(options, "BUILD_EXACT_DISTRIBUTIONS", betSize, 0, universeSize, overallProcessedWork);
+      await forEachCombinationAsync(25, betSize, (indexes) => {
+        const profile = calculateLotofacilMetricProfile(indexes.map((index) => index + 1));
+        observeStructuralDistribution(set, profile);
+        if (set.totalOutcomes - lastProgress >= LOTOFACIL_STRUCTURAL_PROGRESS_INTERVAL) {
+          lastProgress = set.totalOutcomes;
+          emitStructuralProgress(options, "BUILD_EXACT_DISTRIBUTIONS", betSize, set.totalOutcomes, universeSize, overallProcessedWork + set.totalOutcomes);
+        }
+      }, { signal: options.signal, batchSize: LOTOFACIL_STRUCTURAL_CANCELLATION_BATCH_SIZE });
+      overallProcessedWork += universeSize;
+      set.axisProfile = finalizeAxisDistributionProfile(betSize, set.axisAccumulator);
+      emitStructuralProgress(options, "BUILD_EXACT_DISTRIBUTIONS", betSize, universeSize, universeSize, overallProcessedWork);
+      distributionSets.set(betSize, set);
+    }
+
+    const reference = distributionSets.get(15)!;
+    const policies = LOTOFACIL_SUPPORTED_BET_SIZES.map((betSize) =>
+      deriveLotofacilStructuralPolicy(distributionSets.get(betSize)!, reference));
+    const masses: LotofacilStructuralMassArtifact[] = [];
+    for (const policy of policies) {
+      const internalPolicy = internalPolicyFromArtifact(policy);
+      const accumulator = createMassAccumulator();
+      const universeSize = policy.universeSize;
+      let lastProgress = 0;
+      emitStructuralProgress(options, "BUILD_CLASSIFIED_MASSES", policy.betSize, 0, universeSize, overallProcessedWork);
+      await forEachCombinationAsync(25, policy.betSize, (indexes) => {
+        const profile = calculateLotofacilMetricProfile(indexes.map((index) => index + 1));
+        const classification: LotofacilStructuralClassification = {
+          classifierVersion: internalPolicy.classifierVersion,
+          extremeRules: classifyRulesWithPolicy(profile, internalPolicy),
+          auxiliaryAxisSignals: {
+            rows: auxiliaryAxisSignal(profile.axisOccupancy.rows, profile.betSize),
+            columns: auxiliaryAxisSignal(profile.axisOccupancy.columns, profile.betSize),
+          },
+        };
+        const summary = summarizeWithPolicy(profile, classification, internalPolicy);
+        observeMass(accumulator, classification, summary);
+        if (accumulator.totalOutcomes - lastProgress >= LOTOFACIL_STRUCTURAL_PROGRESS_INTERVAL) {
+          lastProgress = accumulator.totalOutcomes;
+          emitStructuralProgress(options, "BUILD_CLASSIFIED_MASSES", policy.betSize, accumulator.totalOutcomes, universeSize, overallProcessedWork + accumulator.totalOutcomes);
+        }
+      }, { signal: options.signal, batchSize: LOTOFACIL_STRUCTURAL_CANCELLATION_BATCH_SIZE });
+      overallProcessedWork += universeSize;
+      emitStructuralProgress(options, "BUILD_CLASSIFIED_MASSES", policy.betSize, universeSize, universeSize, overallProcessedWork);
+      masses.push(finalizeStructuralMass(policy, accumulator));
+    }
+
+    if (overallProcessedWork !== LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS) {
+      throw new StructuralMassReconciliationFailedError("Combination visit ceiling was not met exactly.");
+    }
+    emitStructuralProgress(options, "FINALIZE_ARTIFACTS", null, 0, 13, overallProcessedWork);
+    const references = policies.map((policy, index) => ({
+      betSize: policy.betSize,
+      policyId: policy.policyId,
+      policyVersion: policy.policyVersion,
+      policyHash: policy.artifactHash,
+      massHash: masses[index]!.artifactHash,
+    }));
+    const indexWithoutHash = {
+      contractVersion: LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION,
+      artifactSchemaVersion: LOTOFACIL_STRUCTURAL_ARTIFACT_SCHEMA_VERSION,
+      canonicalSerializationVersion: LOTOFACIL_STRUCTURAL_CANONICAL_SERIALIZATION_VERSION,
+      policySetId: LOTOFACIL_STRUCTURAL_POLICY_SET_ID,
+      policySetVersion: LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION,
+      formulaVersion: LOTOFACIL_STRUCTURAL_FORMULA_VERSION,
+      classifierVersion: LOTOFACIL_STRUCTURAL_CLASSIFIER_V2_VERSION,
+      massAlgorithmVersion: LOTOFACIL_STRUCTURAL_MASS_V2_ALGORITHM_VERSION,
+      references,
+      historyUsed: false as const,
+      samplingUsed: false as const,
+      probabilityClaimed: false as const,
+    };
+    const index = lotofacilStructuralPolicySetIndexSchema.parse({
+      ...indexWithoutHash,
+      artifactHash: calculateLotofacilStructuralArtifactHash(indexWithoutHash),
+    });
+    const result = lotofacilStructuralPolicySetSchema.parse({
+      contractVersion: LOTOFACIL_STRUCTURAL_POLICY_CONTRACT_VERSION,
+      formulaVersion: LOTOFACIL_STRUCTURAL_FORMULA_VERSION,
+      combinationVisits: LOTOFACIL_STRUCTURAL_MAX_COMBINATION_VISITS,
+      policies,
+      masses,
+      index,
+      transient: true,
+      persisted: false,
+      partial: false,
+    });
+    const verifiedResult = verifyLotofacilStructuralPolicySet(result);
+    emitStructuralProgress(options, "FINALIZE_ARTIFACTS", null, 13, 13, overallProcessedWork);
+    return verifiedResult;
+  } catch (error) {
+    if (error instanceof CombinationIterationCancelledError || options.signal?.aborted) {
+      throw new StructuralPolicyBuildCancelledError();
+    }
+    throw error;
+  }
+}
+
+export function verifyLotofacilStructuralPolicySet(input: unknown): LotofacilStructuralPolicySet {
+  const result = lotofacilStructuralPolicySetSchema.parse(input);
+  for (const artifact of [...result.policies, ...result.masses, result.index]) {
+    const actual = calculateLotofacilStructuralArtifactHash(
+      hashableArtifact(artifact as unknown as Record<string, unknown>),
+    );
+    if (actual !== artifact.artifactHash) throw new StructuralArtifactHashMismatchError();
+  }
+  result.policies.forEach((policy, index) => {
+    const mass = result.masses[index]!;
+    const reference = result.index.references[index]!;
+    if (
+      policy.betSize !== LOTOFACIL_SUPPORTED_BET_SIZES[index] || mass.betSize !== policy.betSize ||
+      reference.betSize !== policy.betSize || reference.policyHash !== policy.artifactHash ||
+      reference.massHash !== mass.artifactHash || mass.policyId !== policy.policyId
+    ) throw new StructuralPolicyDependencyMismatchError();
+  });
+  const legacyMasses = result.masses[0]!.bandMasses.map((bucket) => bucket.count);
+  const legacySnapshot = LOTOFACIL_STRUCTURAL_MASS_SNAPSHOT.buckets.map((bucket) => bucket.occurrences);
+  if (legacyMasses.some((count, index) => count !== legacySnapshot[index])) {
+    throw new StructuralMassReconciliationFailedError("The 15-number legacy mass changed.");
+  }
+  return result;
+}
+
+export interface LotofacilCanonicalFormulaManifestV1_1 {
+  readonly formulaVersion: typeof LOTOFACIL_STRUCTURAL_FORMULA_VERSION;
+  readonly legacyManifest: LotofacilCanonicalFormulaManifest;
+  readonly structuralPolicySet: Readonly<{
+    policySetId: typeof LOTOFACIL_STRUCTURAL_POLICY_SET_ID;
+    policySetVersion: typeof LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION;
+    indexHash: string;
+    references: LotofacilStructuralPolicySet["index"]["references"];
+  }>;
+}
+
+export function getLotofacilCanonicalFormulaManifestV1_1(
+  input: unknown,
+): LotofacilCanonicalFormulaManifestV1_1 {
+  const policySet = verifyLotofacilStructuralPolicySet(input);
+  return {
+    formulaVersion: LOTOFACIL_STRUCTURAL_FORMULA_VERSION,
+    legacyManifest: getLotofacilCanonicalFormulaManifest(),
+    structuralPolicySet: {
+      policySetId: LOTOFACIL_STRUCTURAL_POLICY_SET_ID,
+      policySetVersion: LOTOFACIL_STRUCTURAL_POLICY_SET_VERSION,
+      indexHash: policySet.index.artifactHash,
+      references: policySet.index.references.map((reference) => ({ ...reference })),
+    },
   };
 }

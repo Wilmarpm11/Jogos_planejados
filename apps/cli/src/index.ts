@@ -63,6 +63,7 @@ import {
   getLotofacilCanonicalFormulaManifest,
   calculateLotofacilMetricProfile,
   calculateLotofacilStructuralMass,
+  buildLotofacilStructuralPolicySet,
   classifyLotofacilStructuralProfile,
   generateLotofacilPortfolio,
   lotofacilCanonicalBetExpansionAdapter,
@@ -74,6 +75,7 @@ import {
   summarizeLotofacilStructuralProfile,
   LOTOFACIL_SPECIAL_DRAW_TYPES,
   validateLotofacilStructuralAllocation,
+  verifyLotofacilStructuralPolicySet,
   summarizeLotofacilStructuralAllocation,
 } from "@boloes/lottery-lotofacil";
 import { exactCoverageAuditErrorRecord, exactCoverageAuditExitCode } from "./coverage-errors.js";
@@ -86,6 +88,10 @@ import {
   portfolioDiversityOptimizationExitCode,
 } from "./portfolio-diversity-errors.js";
 import { operationalCostAndQuotasErrorRecord } from "./operational-cost-and-quotas-errors.js";
+import {
+  structuralPolicyErrorRecord,
+  structuralPolicyExitCode,
+} from "./structural-policy-errors.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -118,6 +124,10 @@ Comandos:
                        Deriva perfis métricos locais, sem agregação ou estratégia.
   data lotofacil-metric-profiles --size 10|25|50|100|250|complete [--db PATH]
                        Consulta perfis métricos históricos já derivados.
+  lotofacil structural-policy build
+                       Constrói políticas e massas estruturais exatas 15–20 com progresso local.
+  lotofacil structural-policy verify --input PATH
+                       Verifica schemas, versões, reconciliações e hashes do conjunto estrutural.
   cohort create --lottery ID --selector PATH [--db PATH]
                        Cria uma coorte por seletor objetivo de concursos.
   cohort classify-lotofacil-special --result ID --type TYPE [--db PATH]
@@ -689,6 +699,39 @@ if (command === "help" || command === "--help" || command === "-h") {
       process.exitCode = exactCoverageAuditExitCode(error);
     } finally {
       process.off("SIGINT", cancelOnSigint);
+    }
+  }
+} else if (command === "lotofacil" && process.argv[3] === "structural-policy" && process.argv[4] === "build") {
+  const cancellation = new AbortController();
+  const cancelOnSigint = (): void => cancellation.abort();
+  process.once("SIGINT", cancelOnSigint);
+  try {
+    const result = await buildLotofacilStructuralPolicySet({
+      signal: cancellation.signal,
+      onProgress: (progress) => process.stderr.write(JSON.stringify(progress) + "\n"),
+    });
+    process.stdout.write(JSON.stringify(result) + "\n");
+  } catch (error) {
+    process.stderr.write(JSON.stringify(structuralPolicyErrorRecord(error)) + "\n");
+    process.exitCode = structuralPolicyExitCode(error);
+  } finally {
+    process.off("SIGINT", cancelOnSigint);
+  }
+} else if (command === "lotofacil" && process.argv[3] === "structural-policy" && process.argv[4] === "verify") {
+  const inputPath = argumentValue("--input");
+  if (!inputPath) {
+    const error = new Error("Informe --input com o conjunto estrutural 15–20.");
+    process.stderr.write(JSON.stringify(structuralPolicyErrorRecord(error)) + "\n");
+    process.exitCode = 1;
+  } else {
+    try {
+      const result = verifyLotofacilStructuralPolicySet(
+        JSON.parse(readFileSync(resolve(inputPath), "utf8")),
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch (error) {
+      process.stderr.write(JSON.stringify(structuralPolicyErrorRecord(error)) + "\n");
+      process.exitCode = structuralPolicyExitCode(error);
     }
   }
 } else if (command === "lotofacil" && process.argv[3] === "expand") {

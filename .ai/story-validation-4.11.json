@@ -1,0 +1,34 @@
+{
+  "story": "4.11",
+  "path": "docs/stories/4.11.lotofacil-16-20-policies-and-test-masses.story.md",
+  "contractPath": "docs/architecture/lotofacil-16-20-structural-policies-and-masses.md",
+  "validatedAt": "2026-09-05",
+  "validators": ["@architect", "@po"],
+  "architectureVerdict": "PASS",
+  "verdict": "GO",
+  "score": 9,
+  "confidence": "high",
+  "statusTransition": {
+    "from": "Draft",
+    "to": "Ready"
+  },
+  "checks": {
+    "templateCompleteness": "PASS",
+    "requirementsTraceability": "PASS",
+    "architectureAlignment": "PASS",
+    "acceptanceCriteriaCoverage": "PASS",
+    "testingInstructions": "PASS",
+    "exactArithmetic": "PASS",
+    "determinismAndVersioning": "PASS",
+    "operationalLimits": "PASS",
+    "implementationReadiness": "PASS"
+  },
+  "criticalIssues": [],
+  "shouldFixIssues": [],
+  "notes": [
+    "A política de 15 permanece congelada e serve de referência exata de raridade.",
+    "O build produtivo possui exatamente duas passagens e teto de 14.208.480 visitas.",
+    "O perfil canônico de serialização, versões e hashes está fechado no contrato arquitetural.",
+    "A Story 4.12, geração, histórico, persistência, IPC e UI permanecem fora do escopo."
+  ]
+}

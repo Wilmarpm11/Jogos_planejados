@@ -41,3 +41,17 @@ npm run cli -- lotofacil formula
 
 A saída JSON é determinística para a mesma versão dos contratos e pode ser
 comparada em auditorias locais.
+
+## Extensão aditiva 1.1.0 — Story 4.11
+
+`getLotofacilCanonicalFormulaManifestV1_1(policySet)` preserva integralmente o
+manifesto `1.0.0` no campo `legacyManifest` e acrescenta somente referências
+ordenadas por `betSize` às políticas e massas estruturais 15–20 já verificadas.
+Cada referência contém `betSize`, `policyId`, `policyVersion`, `policyHash` e
+`massHash`. `classifierVersion` e `massAlgorithmVersion` pertencem ao índice,
+não a cada referência.
+
+A extensão não recalibra nem reinterpreta os limites, a massa ou o manifesto
+de 15. O argumento deve ser um conjunto completo compatível, validado contra o
+perfil canônico de serialização e seus hashes; misturas de versões, tamanhos ou
+identidades falham antes da publicação do manifesto `1.1.0`.
