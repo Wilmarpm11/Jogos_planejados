@@ -1,9 +1,9 @@
-# PRD v0.4.13 - Plataforma de Engenharia de Bolões
+# PRD v0.4.14 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
 **Modelo de licença:** GPL-3.0-or-later  
-**Última atualização:** 2026-09-05
+**Última atualização:** 2026-09-07
 
 ## Change log
 
@@ -24,6 +24,7 @@
 | 2026-09-04 | 0.4.11 | Regra de produto para custo/cotas: taxa percentual configurável, padrão 0%, base oficial sem dupla contagem e rateio auditável em centavos | Produto / PM |
 | 2026-09-05 | 0.4.12 | Contrato P0 de custo/cotas fechado: taxa em basis points, HALF_UP, quotaId numérico, base homogênea discriminada e limites de cotas do catálogo | Produto / PO / Arquitetura |
 | 2026-09-05 | 0.4.13 | Política estrutural 16–20 fechada: métricas preservadas, limites por cauda exata, E9/E10 normalizados, faixas/núcleo próprios e enumeração integral | Produto / Análise / PO / Arquitetura |
+| 2026-09-07 | 0.4.14 | Gate de políticas e massas 16–20 concluído pela Story 4.11, com QA, revisão remota, fixtures e hashes preservados | QA / PO / SM |
 
 ## 1. Objetivo e contexto
 
@@ -643,12 +644,15 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   canonização/ordenação de jogos. Evidências:
   `docs/architecture/lotofacil-canonical-formula.md`, Story 2.5,
   `tests/lotofacil/canonical-formula-manifest.test.ts` e gate QA 2.5.
-- [ ] Implementar e validar as massas e políticas estruturais próprias dos
+- [x] Implementar e validar as massas e políticas estruturais próprias dos
   universos de apostas 16–20 antes de habilitar sua geração automática. As
-  decisões de Produto e o contrato matemático estão aprovados na Story 4.11 e
-  em `docs/architecture/lotofacil-16-20-structural-policies-and-masses.md`;
-  falta a entrega executável, suas fixtures, a regressão bloqueante de 15 e o
-  gate QA. O manifesto será atualizado somente de modo aditivo e versionado.
+  decisões de Produto, o contrato matemático e a entrega executável foram
+  concluídos na Story 4.11 e em
+  `docs/architecture/lotofacil-16-20-structural-policies-and-masses.md`. O PR
+  #11 foi incorporado por squash em `main@390c7cd`, com QA `PASS` 100/100,
+  CodeRabbit `SUCCESS`, regressão bloqueante de 15, fixture, índice, seis
+  `policyHash` e seis `massHash` preservados. O manifesto foi estendido apenas
+  de modo aditivo e versionado.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
   simples, timeout de 30 s e erro zero, conforme

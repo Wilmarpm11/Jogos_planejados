@@ -1,48 +1,50 @@
 # Análise de encerramento do Épico 4
 
-**Data da auditoria:** 2026-09-06
+**Data da auditoria:** 2026-09-07
 
-**Base auditada:** `origin/main@9b9131873a76abcaf2d8a7b0bf2b558d02119c91`
-e branch local `docs/epic-4-backlog-4.10-4.11-ready`, criada a partir desse
-commit
+**Base auditada:** `main` e `origin/main` em
+`390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c`, com branch administrativa
+`docs/4.11-post-merge-closure` criada a partir desse commit
 
 **Decisão:** Épico 4 permanece aberto
 
 ## Estado verificado
 
 - A `main` local foi atualizada exclusivamente por fast-forward e coincide com
-  `origin/main` em `9b91318`.
-- Os oito PRs existentes estão `MERGED`; não há PR nem issue aberta.
-- Antes da restauração deste pacote documental, as 27 stories existentes na
-  `main` estavam `Done` e os 27 gates correspondentes em `docs/qa/gates/`
-  estavam `PASS`.
+  `origin/main` em `390c7cd`.
 - A Story 4.8 foi incorporada pelo PR #7, com gate QA `PASS`, score 100 e
   regressão integral de 174 testes registrada no artefato de qualidade.
 - A Story 4.9 foi incorporada pelo PR #8 no merge commit `9b91318`, com gate QA
   `PASS`, AC1–AC12 sem gaps, 194 testes regressivos e CodeRabbit final sem
   achados.
-- As Stories 4.10–4.12 ainda não existiam no início desta atualização; seus
-  drafts e o backlog anterior ao Épico 5 foram preparados sem implementação.
+- A Story 4.10 foi incorporada pelo PR #10 no squash `f04a9ec`, com gate QA
+  `PASS` 100/100.
+- A Story 4.11 foi incorporada pelo PR #11 no squash `390c7cd`, com gate QA
+  `PASS` 100/100, CodeRabbit `SUCCESS` e fixture, índice, seis `policyHash` e
+  seis `massHash` preservados.
+- A Story 4.12 permanece `Draft`, sem implementação; a conclusão da 4.11
+  satisfaz somente seu pré-requisito matemático.
 - Nenhuma branch foi removida durante esta auditoria.
-- As alterações administrativas foram isoladas na branch local
-  `docs/epic-4-backlog-4.10-4.11-ready`, criada a partir de `9b91318`; ela é a
-  branch ativa deste trabalho e não faz parte do inventário de limpeza.
+- As alterações administrativas foram isoladas na branch
+  `docs/4.11-post-merge-closure`, criada a partir de `390c7cd`; ela é a branch
+  ativa deste trabalho e não faz parte do inventário de limpeza.
 
 ## Parecer de encerramento
 
-As Stories 4.1–4.9 estão incorporadas à `main`, mas o Épico 4 ainda não pode ser
-encerrado porque o backlog 4.10–4.12 permanece sem implementação. A entrada no
-Épico 5 também exige os gates fundacionais de persistência e IPC descritos em
-`docs/backlog-before-epic-5.md`.
+As Stories 4.1–4.11 estão incorporadas à `main`, mas o Épico 4 ainda não pode
+ser encerrado enquanto a Story 4.12 permanecer `Draft` e pendente. Antes de sua
+promoção para `Ready`, o gate `F5-IPC-SPEC` e as demais decisões contratuais
+devem ser concluídos. A entrada no Épico 5 também exige os gates fundacionais
+de persistência e IPC descritos em `docs/backlog-before-epic-5.md`.
 
 ## Classificação das pendências
 
 | Capacidade | Classificação | Impacto no encerramento |
 | --- | --- | --- |
 | Otimização de diversidade | Entregue e incorporada pela Story 4.9 | Política, contrato, implementação e QA estão concluídos no PR #8 e em `main@9b91318`. |
-| Cálculo operacional de custo e cotas (FR-06) | Story 4.10, P0, Ready | Produto fechou as regras monetárias e de base; contrato `1.0` recebeu `PASS` arquitetural e a story recebeu `GO` 9/10 do PO. |
-| Políticas e massas 16–20 | Story 4.11, Ready | Sete decisões de Produto, contrato `1.0`, `PASS` arquitetural e `GO` do PO concluídos; implementação ainda não iniciada e permanece pré-requisito da 4.12. |
-| Geração de apostas 16–20 | Story 4.12, Draft | Expansão 15–20 não equivale a geração; depende da 4.11 e não amplia automaticamente diversidade/cobertura. |
+| Cálculo operacional de custo e cotas (FR-06) | Story 4.10, `Done` | Implementação, QA e fechamento concluídos pelo PR #10 em `main@f04a9ec`. |
+| Políticas e massas 16–20 | Story 4.11, `Done` | Implementação versionada, fixture, hashes, QA e revisão concluídos pelo PR #11 em `main@390c7cd`. [closure-key: 4.11:commit:390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c] |
+| Geração de apostas 16–20 | Story 4.12, `Draft` | O pré-requisito 4.11 está concluído, mas `F5-IPC-SPEC` e as decisões próprias ainda bloqueiam `Ready`; nenhuma geração foi implementada. |
 | Persistência local e IPC Tauri/Python | Fundação técnica anterior ao Épico 5 | Contratos, identidades, auditoria, erros, limites e packaging ainda precisam ser decididos; nenhuma implementação está autorizada. |
 | Relatório pré-impressão | Escopo explícito do Épico 5 | Não é débito da Story 4.8; depende de custo/cotas e deve compor resultados existentes sem recalculá-los. |
 | Aprovação e `FrozenPortfolio` | Escopo explícito do Épico 5 | Os tipos/hash básicos existem, mas o fluxo, a revisão e a persistência de congelamento ainda não. |
@@ -66,11 +68,11 @@ encerrado porque o backlog 4.10–4.12 permanece sem implementação. A entrada 
 
 1. **Story 4.9 — Otimização determinística de diversidade da carteira
    Lotofácil simples.** Concluída e incorporada pelo PR #8 em `9b91318`.
-2. **Story 4.10 — Cálculo operacional de custo e cotas Lotofácil.** P0 e
-   `Ready`; compõe o catálogo existente e habilita o relatório do Épico 5.
+2. **Story 4.10 — Cálculo operacional de custo e cotas Lotofácil.** Concluída
+   e incorporada pelo PR #10 em `f04a9ec`.
 3. **Story 4.11 — Políticas e massas estruturais versionadas Lotofácil
-   16–20.** P1 e `Ready`; contrato exato aprovado sem reutilizar parâmetros de
-   15; implementação ainda não iniciada.
+   16–20.** Concluída e incorporada pelo PR #11 em `390c7cd`, sem reutilizar
+   parâmetros de 15.
 4. **Gate F5-IPC-SPEC — especificação Tauri/TypeScript–Python.** Decide, sem
    implementar, se a Story 4.12 permanece em TypeScript limitado ou exige uma
    operação no worker Python.
@@ -155,28 +157,27 @@ sem achados. O commit final da branch foi `2c9dc3c` e o PR #8 foi incorporado à
 
 ### Para as stories seguintes
 
-1. Story 4.11: implementar o contrato aprovado de E1–E10, faixas, núcleo,
-   massas/fixtures exatas, versões e hashes para 16–20, preservando a regressão
-   bloqueante de 15.
-2. Story 4.12: modos autorizados, limites, compatibilidade de seed, erros e
+1. Story 4.12: modos autorizados, limites, compatibilidade de seed, erros e
    fronteiras com diversidade/expansão/cobertura por tamanho.
-3. F5-PERSIST: inventário persistido, identidades, mutabilidade, versionamento,
+2. F5-PERSIST: inventário persistido, identidades, mutabilidade, versionamento,
    auditoria, atomicidade, recuperação, erros e limites; contrato aprovado não
    equivale ao gate de saída `F5-PERSIST-DONE`.
-4. F5-IPC-SPEC: envelope, serialização, operações, progresso, cancelamento,
+3. F5-IPC-SPEC: envelope, serialização, operações, progresso, cancelamento,
    erros, limites, compatibilidade, empacotamento local e a fronteira de
-   execução da 4.12.
-5. F5-IPC-DONE: implementação aplicável e conformidade cruzada do contrato; é
+   execução da 4.12; permanece bloqueante antes de promover a Story 4.12 para
+   `Ready`.
+4. F5-IPC-DONE: implementação aplicável e conformidade cruzada do contrato; é
    bloqueante para a 4.12 somente se o SPEC escolher Python, e sempre bloqueia
    a entrada no Épico 5 e a implementação da UI.
-6. Épico 5: decidir quais achados bloqueiam aprovação, conteúdo/identidade do
+5. Épico 5: decidir quais achados bloqueiam aprovação, conteúdo/identidade do
    relatório, ato de aprovação, fronteira do hash, revisões e navegação/conteúdo
    da tela inicial.
 
 ## Inventário de branches
 
-O repositório remoto possui `main` e sete branches de trabalho. Todas as sete
-têm PR correspondente comprovadamente `MERGED` pelo GitHub e podem ser
+O repositório remoto possui `main` e dez branches de trabalho relacionadas ao
+Épico 4. Todas as dez têm PR correspondente comprovadamente `MERGED` pelo
+GitHub e podem ser
 removidas após autorização explícita, apesar de seus commits não aparecerem
 como ancestrais diretos da `main` por causa do squash merge.
 
@@ -189,6 +190,13 @@ como ancestrais diretos da `main` por causa do squash merge.
 | `feature/4.7-lotofacil-canonical-bet-expansion` | `22ad241` | PR #6 `MERGED` | `59cefa4` |
 | `feature/4.8-lotofacil-expanded-coverage-composition` | `868aee3` | PR #7 `MERGED` | `d9fbf06` |
 | `feature/4.9-lotofacil-deterministic-diversity-optimization` | `2c9dc3c` | PR #8 `MERGED` | `9b91318` |
+| `docs/epic-4-backlog-4.10-4.11-ready` | `4ec4bc8` | PR #9 `MERGED` | `134d0ae` |
+| `feature/4.10-lotofacil-operational-cost-and-quotas` | `9178e35` | PR #10 `MERGED` | `f04a9ec` |
+| `feature/4.11-lotofacil-16-20-structural-policies-and-masses` | `dac4910` | PR #11 `MERGED` | `390c7cd` |
 
 A branch da Story 4.4 já não existe localmente nem no remoto; o PR #1 está
 `MERGED` em `575297c`.
+
+A branch local `chore/epic-4-administrative-closure` e a branch ativa
+`docs/4.11-post-merge-closure` também foram preservadas; nenhuma exclusão foi
+executada.
