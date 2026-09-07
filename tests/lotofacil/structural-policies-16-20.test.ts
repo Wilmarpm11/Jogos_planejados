@@ -50,6 +50,15 @@ const fixture = lotofacilStructuralPolicySetSchema.parse(JSON.parse(fixtureBytes
 let built: LotofacilStructuralPolicySet;
 let progress: Array<Record<string, unknown>>;
 
+function expectStructuralPolicySchemaRejection(input: unknown): void {
+  const result = lotofacilStructuralPolicySchema.safeParse(input);
+  expect(result.success).toBe(false);
+  if (!result.success) expect(result.error.name).toBe("ZodError");
+  expect(() => lotofacilStructuralPolicySchema.parse(input)).toThrowError(
+    expect.objectContaining({ name: "ZodError" }),
+  );
+}
+
 beforeAll(async () => {
   progress = [];
   built = await buildLotofacilStructuralPolicySet({
@@ -354,6 +363,103 @@ describe("Lotofacil structural policies and masses 15-20", () => {
       ...progress[0],
       totalWork: 1,
     })).toThrow();
+  });
+
+  it("enforces the unilateral E8 schema without leaking TypeError", () => {
+    const valid = fixture.policies[0]!;
+    expect(valid.rules[7]).toMatchObject({
+      ruleId: "E8",
+      metric: "AMPLITUDE",
+      tails: [{ tail: "LOWER", operator: "LESS_THAN_OR_EQUAL" }],
+    });
+    expect(lotofacilStructuralPolicySchema.safeParse(valid).success).toBe(true);
+
+    const secondTail = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: unknown[] }>;
+    };
+    secondTail.rules[7]!.tails.push({
+      ...structuredClone(valid.rules[7]!.tails[0]),
+      tail: "UPPER",
+      operator: "GREATER_THAN_OR_EQUAL",
+      limit: { numerator: 8, denominator: 15 },
+      referenceLimit: { numerator: 8, denominator: 15 },
+    });
+    expectStructuralPolicySchemaRejection(secondTail);
+
+    const missingTail = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: unknown[] }>;
+    };
+    missingTail.rules[7]!.tails = [];
+    expectStructuralPolicySchemaRejection(missingTail);
+
+    const incorrectShape = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: Array<Record<string, unknown>> }>;
+    };
+    incorrectShape.rules[7]!.tails[0]!.referenceLimit = { numerator: 8 };
+    expectStructuralPolicySchemaRejection(incorrectShape);
+
+    const additionalField = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: Array<Record<string, unknown>> }>;
+    };
+    additionalField.rules[7]!.tails[0]!.unexpected = true;
+    expectStructuralPolicySchemaRejection(additionalField);
+  });
+
+  it.each([0, 1, 2, 3, 4, 5, 6])(
+    "rejects E%i when one of its two contracted tails is absent",
+    (ruleIndex) => {
+      const invalid = structuredClone(fixture.policies[0]!) as unknown as {
+        rules: Array<{ tails: unknown[] }>;
+      };
+      invalid.rules[ruleIndex]!.tails.pop();
+      expectStructuralPolicySchemaRejection(invalid);
+    },
+  );
+
+  it.each([8, 9])("preserves the unilateral exact-fraction contract for E%i", (ruleIndex) => {
+    const valid = fixture.policies[0]!;
+    expect(valid.rules[ruleIndex]).toMatchObject({
+      tails: [{ tail: "UPPER", operator: "GREATER_THAN_OR_EQUAL" }],
+    });
+    expect(typeof valid.rules[ruleIndex]!.tails[0]!.limit).not.toBe("number");
+    expect(lotofacilStructuralPolicySchema.safeParse(valid).success).toBe(true);
+
+    const secondTail = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: unknown[] }>;
+    };
+    secondTail.rules[ruleIndex]!.tails.push(
+      structuredClone(valid.rules[ruleIndex]!.tails[0]),
+    );
+    expectStructuralPolicySchemaRejection(secondTail);
+
+    const scalarLimit = structuredClone(valid) as unknown as {
+      rules: Array<{ tails: Array<Record<string, unknown>> }>;
+    };
+    scalarLimit.rules[ruleIndex]!.tails[0]!.limit = 8;
+    expectStructuralPolicySchemaRejection(scalarLimit);
+  });
+
+  it("keeps the complete fixture and all canonical policy and mass hashes unchanged", () => {
+    expect(lotofacilStructuralPolicySetSchema.safeParse(fixture).success).toBe(true);
+    expect(fixture.policies.map((policy) => policy.artifactHash)).toEqual([
+      "sha256:09e65525e23e3212533718c7300533d6164815ed2e6efa82cd8a9e98e055ae30",
+      "sha256:7b7f0d46777176183742fb73d4abb5ada770d47a43eb43991d3a2434e3d275d5",
+      "sha256:bbcd0c7cb13fccbc0a594ebe0e7bd09515ea4c1c26ace156d17e675f259f75a4",
+      "sha256:eadf7c0d62c337e6db9fadf000482fea8f565cc35a23b859598ac15ac983ad0d",
+      "sha256:5692c8b7400d3174cffc3d59b52ff572f28e0bd726fb3c5ea07782b3b0146680",
+      "sha256:ca1437b44d3006637a9e49f366f455da0513298f59f8e8c531d1834e2e7958df",
+    ]);
+    expect(fixture.masses.map((mass) => mass.artifactHash)).toEqual([
+      "sha256:b8c2348b86774f2bbc99f73de788960f9d5a8c52e653cdf1927c26e3b7574c25",
+      "sha256:e6aa9ed585e011b252521039536fdb94d779b91adc50155a95a887a100d9c150",
+      "sha256:e7876bab904049b5162fc453a435e9d43359ef9e8785cd2f89eb4df8ba33d991",
+      "sha256:f8a1194582cf99b07cdeffe2e09465f9cc9264709141f8e82c4da674ee72f85c",
+      "sha256:263a3163de8cd97de8df3c4d37716c3a0c1fea714695e07e3d17e9486f43854a",
+      "sha256:f022c9ecca2b13336a45afb76d27701156564570b0c38a0bf591d50d8c69ee08",
+    ]);
+    expect(fixture.index.artifactHash).toBe(
+      "sha256:3a607dbb863e5dbdc92d00cce3efd93455afcc344626c3d9aa6bc97e1decc141",
+    );
   });
 
   it("verifies every artifact hash and rejects a one-field mutation", () => {

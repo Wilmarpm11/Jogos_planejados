@@ -2725,8 +2725,9 @@ const lotofacilStructuralPolicyBaseSchema = z.object({
         context.addIssue({ code: "custom", path: ["rules", index, "tails", tailIndex], message: "Rule tail/operator is not canonical." });
       }
       const expectedReference = index < 8
-        ? referenceLimits[index]![tailIndex]!
+        ? referenceLimits[index]?.[tailIndex]
         : { numerator: 8, denominator: 15 };
+      if (expectedReference === undefined) return;
       const referenceMatches = typeof expectedReference === "number"
         ? tail.referenceLimit === expectedReference
         : typeof tail.referenceLimit !== "number" &&
