@@ -1,0 +1,59 @@
+schema: 1
+story: '4.10'
+story_title: 'Custo operacional e cotas da carteira Lotofácil'
+gate: PASS
+status_reason: 'Os AC 1–14 estão integralmente cobertos; contratos, aritmética monetária, bases compradas, rateio, determinismo, CLI e regressões foram verificados sem achados remanescentes.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: '134d0ae7a3d4845a6da83c92ad85311aa1ef73e3 + working-tree sha256:f6fd50cb441be4b4baafa51828400db1a58ab77424a88d0f6843d88c47689449'
+updated: '2026-09-06T23:03:40Z'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-20T23:03:40Z'
+evidence:
+  tests_reviewed: 39
+  focused_tests_passed: 39
+  regression_tests_passed: 224
+  test_files_passed: 26
+  checks:
+    - 'npm run lint'
+    - 'npm run typecheck'
+    - 'npm test'
+    - 'testes focados 4.10, contratos e catálogo 3.5'
+    - 'git diff --check'
+    - 'CodeRabbit Pre-Commit'
+    - 'revisão AIOX Architect'
+    - 'revisão AIOX QA independente'
+  coderabbit:
+    status: PASS
+    final_findings: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    ac_gaps: []
+risk_summary:
+  totals:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 0
+  highest_score: 0
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Schemas estritos, execução local e ausência de dados pessoais, rede, pagamento ou persistência.'
+  performance:
+    status: PASS
+    notes: 'Cálculo linear em ocorrências e cotas, sem expansão implícita ou loop combinatório.'
+  reliability:
+    status: PASS
+    notes: 'Aritmética inteira exata, preflight ordenado, resultado conjunto validado e nenhuma saída parcial.'
+  maintainability:
+    status: PASS
+    notes: 'Primitiva neutra, adapter Lotofácil, contratos versionados e regressões 3.5/4.9 preservadas.'
+recommendations:
+  immediate: []
+  future:
+    - action: 'Exigir novo contrato/versionamento antes de alterar taxa, arredondamento, base, ordenação ou limites aplicados.'
+      refs:
+        - 'docs/architecture/lotofacil-operational-cost-and-quotas-contract.md'

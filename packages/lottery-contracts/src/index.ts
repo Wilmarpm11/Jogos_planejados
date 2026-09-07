@@ -115,12 +115,25 @@ function hasEveryLotofacilPrizeTierExactlyOnce(prizeTiers: readonly number[]): b
 }
 
 const lotofacilPriceByBetSizeSchema = z
-  .array(z.object({ betSize: z.number().int().min(15).max(20), priceInCents: z.number().int().positive() }))
+  .array(z.object({
+    betSize: z.number().int().min(15).max(20),
+    priceInCents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  }).strict())
   .length(LOTOFACIL_SUPPORTED_BET_SIZES.length)
   .refine(hasEveryLotofacilBetSizeExactlyOnce, "priceByBetSize must include each bet size from 15 through 20 exactly once.");
 
+const lotofacilBolaoLimitSchema = z.object({
+  betSize: z.number().int().min(15).max(20),
+  minShares: z.number().int().min(2).max(Number.MAX_SAFE_INTEGER),
+  maxShares: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  maxGamesPerReceipt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+}).strict().refine(
+  ({ minShares, maxShares }) => minShares <= maxShares,
+  "minShares must be at most maxShares.",
+);
+
 const lotofacilBolaoLimitsSchema = z
-  .array(z.object({ betSize: z.number().int().min(15).max(20), minShares: z.number().int().min(2), maxShares: z.number().int().positive(), maxGamesPerReceipt: z.number().int().positive() }))
+  .array(lotofacilBolaoLimitSchema)
   .length(LOTOFACIL_SUPPORTED_BET_SIZES.length)
   .refine(hasEveryLotofacilBetSizeExactlyOnce, "bolaoLimits must include each bet size from 15 through 20 exactly once.");
 
@@ -145,7 +158,7 @@ export const lotofacilCatalogRecordSchema = lotofacilCatalogSchema.extend({
   id: z.string().uuid(),
   sourceSnapshotId: z.string().uuid(),
   persistedAt: z.string().datetime({ offset: true }),
-});
+}).strict();
 export type LotofacilCatalogRecord = z.infer<typeof lotofacilCatalogRecordSchema>;
 
 /**
@@ -1962,4 +1975,500 @@ export interface PortfolioDiversityOptimizationAdapter {
     allocation: Readonly<Record<string, number>>,
     targetCandidateCount: number,
   ): readonly PortfolioDiversityStructuralTarget[];
+}
+
+export const OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION = "1.0" as const;
+export const OPERATIONAL_COST_AND_QUOTAS_ALGORITHM_VERSION =
+  "operational-cost-and-quotas/1.0.0" as const;
+export const OPERATIONAL_COST_AND_QUOTAS_CANDIDATE_ORDERING_VERSION =
+  "ascii-bytewise-of-comma-joined-canonical-games/1.0.0" as const;
+export const OPERATIONAL_COST_FEE_SCALE_BPS = 10_000 as const;
+export const OPERATIONAL_COST_DEFAULT_FEE_BPS = 0 as const;
+export const OPERATIONAL_COST_MAXIMUM_FEE_BPS = 10_000 as const;
+export const OPERATIONAL_COST_FEE_ROUNDING_RULE =
+  "HALF_UP_TO_CENT_ON_TOTAL_OFFICIAL_COST" as const;
+export const OPERATIONAL_COST_QUOTA_DIVISION_RULE =
+  "INTEGER_FLOOR_THEN_ASCENDING_QUOTA_ID_REMAINDER" as const;
+
+export const operationalCostAndQuotasErrorCodeSchema = z.enum([
+  "INVALID_OPERATIONAL_COST_AND_QUOTAS_REQUEST",
+  "UNSUPPORTED_OPERATIONAL_COST_LOTTERY",
+  "INCOMPATIBLE_OPERATIONAL_COST_CATALOG",
+  "AMBIGUOUS_PURCHASED_COST_BASE",
+  "INVALID_PURCHASED_COST_BET",
+  "HETEROGENEOUS_PURCHASED_COST_PORTFOLIO",
+  "INVALID_SERVICE_FEE_BPS",
+  "INVALID_QUOTA_IDS",
+  "QUOTA_COUNT_OUTSIDE_CAIXA_LIMITS",
+  "ZERO_VALUE_QUOTA",
+  "OPERATIONAL_COST_MONETARY_OVERFLOW",
+]);
+export type OperationalCostAndQuotasErrorCode = z.infer<
+  typeof operationalCostAndQuotasErrorCodeSchema
+>;
+
+export class OperationalCostAndQuotasError<
+  TCode extends OperationalCostAndQuotasErrorCode = OperationalCostAndQuotasErrorCode,
+> extends Error {
+  constructor(
+    readonly code: TCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "OperationalCostAndQuotasError";
+  }
+}
+
+export class InvalidOperationalCostAndQuotasRequestError extends
+  OperationalCostAndQuotasError<"INVALID_OPERATIONAL_COST_AND_QUOTAS_REQUEST"> {
+  constructor(message = "Invalid operational cost and quotas request.") {
+    super("INVALID_OPERATIONAL_COST_AND_QUOTAS_REQUEST", message);
+    this.name = "InvalidOperationalCostAndQuotasRequestError";
+  }
+}
+
+export class UnsupportedOperationalCostLotteryError extends
+  OperationalCostAndQuotasError<"UNSUPPORTED_OPERATIONAL_COST_LOTTERY"> {
+  constructor(message = "The requested lottery definition is not supported.") {
+    super("UNSUPPORTED_OPERATIONAL_COST_LOTTERY", message);
+    this.name = "UnsupportedOperationalCostLotteryError";
+  }
+}
+
+export class IncompatibleOperationalCostCatalogError extends
+  OperationalCostAndQuotasError<"INCOMPATIBLE_OPERATIONAL_COST_CATALOG"> {
+  constructor(message = "The operational cost catalog is incompatible.") {
+    super("INCOMPATIBLE_OPERATIONAL_COST_CATALOG", message);
+    this.name = "IncompatibleOperationalCostCatalogError";
+  }
+}
+
+export class AmbiguousPurchasedCostBaseError extends
+  OperationalCostAndQuotasError<"AMBIGUOUS_PURCHASED_COST_BASE"> {
+  constructor(message = "The purchased cost base does not match exactly one supported shape.") {
+    super("AMBIGUOUS_PURCHASED_COST_BASE", message);
+    this.name = "AmbiguousPurchasedCostBaseError";
+  }
+}
+
+export class InvalidPurchasedCostBetError extends
+  OperationalCostAndQuotasError<"INVALID_PURCHASED_COST_BET"> {
+  constructor(message = "The purchased cost base contains an invalid bet.") {
+    super("INVALID_PURCHASED_COST_BET", message);
+    this.name = "InvalidPurchasedCostBetError";
+  }
+}
+
+export class HeterogeneousPurchasedCostPortfolioError extends
+  OperationalCostAndQuotasError<"HETEROGENEOUS_PURCHASED_COST_PORTFOLIO"> {
+  constructor(message = "SOURCE_BETS must be homogeneous by bet size.") {
+    super("HETEROGENEOUS_PURCHASED_COST_PORTFOLIO", message);
+    this.name = "HeterogeneousPurchasedCostPortfolioError";
+  }
+}
+
+export class InvalidServiceFeeBpsError extends
+  OperationalCostAndQuotasError<"INVALID_SERVICE_FEE_BPS"> {
+  constructor(message = "feeBps must be an integer from 0 through 10000.") {
+    super("INVALID_SERVICE_FEE_BPS", message);
+    this.name = "InvalidServiceFeeBpsError";
+  }
+}
+
+export class InvalidQuotaIdsError extends
+  OperationalCostAndQuotasError<"INVALID_QUOTA_IDS"> {
+  constructor(message = "quotaIds must contain positive, unique, safe integers.") {
+    super("INVALID_QUOTA_IDS", message);
+    this.name = "InvalidQuotaIdsError";
+  }
+}
+
+export class QuotaCountOutsideCaixaLimitsError extends
+  OperationalCostAndQuotasError<"QUOTA_COUNT_OUTSIDE_CAIXA_LIMITS"> {
+  constructor(message = "The quota count is outside the applicable CAIXA limits.") {
+    super("QUOTA_COUNT_OUTSIDE_CAIXA_LIMITS", message);
+    this.name = "QuotaCountOutsideCaixaLimitsError";
+  }
+}
+
+export class ZeroValueQuotaError extends OperationalCostAndQuotasError<"ZERO_VALUE_QUOTA"> {
+  constructor(message = "The allocation would produce a zero-value quota.") {
+    super("ZERO_VALUE_QUOTA", message);
+    this.name = "ZeroValueQuotaError";
+  }
+}
+
+export class OperationalCostMonetaryOverflowError extends
+  OperationalCostAndQuotasError<"OPERATIONAL_COST_MONETARY_OVERFLOW"> {
+  constructor(message = "An operational cost value exceeds the public safe-integer boundary.") {
+    super("OPERATIONAL_COST_MONETARY_OVERFLOW", message);
+    this.name = "OperationalCostMonetaryOverflowError";
+  }
+}
+
+const publicSafeIntegerSchema = z.number().int()
+  .min(Number.MIN_SAFE_INTEGER)
+  .max(Number.MAX_SAFE_INTEGER);
+const publicNonNegativeSafeIntegerSchema = publicSafeIntegerSchema.min(0);
+const publicPositiveSafeIntegerSchema = publicSafeIntegerSchema.positive();
+
+export const operationalCostCanonicalBetSchema = z.object({
+  numbers: z.array(z.number().int().min(1).max(25)).min(15).max(20),
+}).strict().superRefine(({ numbers }, context) => {
+  for (let index = 1; index < numbers.length; index += 1) {
+    if (numbers[index]! <= numbers[index - 1]!) {
+      context.addIssue({
+        code: "custom",
+        path: ["numbers", index],
+        message: "Purchased bet numbers must be unique and in strictly ascending order.",
+      });
+    }
+  }
+});
+export type OperationalCostCanonicalBet = z.infer<
+  typeof operationalCostCanonicalBetSchema
+>;
+
+const sourcePurchasedBaseSchema = z.object({
+  type: z.literal("SOURCE_BETS"),
+  bets: z.array(operationalCostCanonicalBetSchema).min(1),
+}).strict().superRefine(({ bets }, context) => {
+  const betSize = bets[0]?.numbers.length;
+  bets.forEach((bet, index) => {
+    if (bet.numbers.length !== betSize) {
+      context.addIssue({
+        code: "custom",
+        path: ["bets", index, "numbers"],
+        message: "SOURCE_BETS must be homogeneous by bet size.",
+      });
+    }
+  });
+});
+
+const expandedPurchasedBaseSchema = z.object({
+  type: z.literal("EXPANDED_SIMPLE_BETS"),
+  bets: z.array(operationalCostCanonicalBetSchema.refine(
+    ({ numbers }) => numbers.length === 15,
+    "EXPANDED_SIMPLE_BETS accepts only 15-number bets.",
+  )).min(1),
+}).strict();
+
+export const operationalCostPurchasedBaseSchema = z.discriminatedUnion("type", [
+  sourcePurchasedBaseSchema,
+  expandedPurchasedBaseSchema,
+]);
+export type OperationalCostPurchasedBase = z.infer<
+  typeof operationalCostPurchasedBaseSchema
+>;
+export type OperationalCostPurchasedBaseType = OperationalCostPurchasedBase["type"];
+
+const lotofacilOperationalCostDefinitionSchema = z.object({
+  id: z.literal("lotofacil"),
+  version: z.literal("1.0.0"),
+  totalNumbers: z.literal(25),
+  drawSize: z.literal(15),
+  minBetSize: z.literal(15),
+  maxBetSize: z.literal(20),
+}).strict();
+
+export const lotofacilOperationalCostAndQuotasRequestSchema = z.object({
+  contractVersion: z.literal(OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION),
+  lotteryDefinition: lotofacilOperationalCostDefinitionSchema,
+  contestNumber: publicPositiveSafeIntegerSchema,
+  catalog: lotofacilCatalogRecordSchema,
+  purchasedBase: operationalCostPurchasedBaseSchema,
+  quotaIds: z.array(publicPositiveSafeIntegerSchema).min(1),
+  feeBps: z.number().int().min(0).max(OPERATIONAL_COST_MAXIMUM_FEE_BPS)
+    .default(OPERATIONAL_COST_DEFAULT_FEE_BPS),
+}).strict().superRefine(({ quotaIds }, context) => {
+  if (new Set(quotaIds).size !== quotaIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["quotaIds"],
+      message: "quotaIds must contain unique identifiers.",
+    });
+  }
+});
+export type LotofacilOperationalCostAndQuotasRequest = z.infer<
+  typeof lotofacilOperationalCostAndQuotasRequestSchema
+>;
+
+export const lotofacilOperationalCostAndQuotasResultSchema = z.object({
+  contractVersion: z.literal(OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION),
+  algorithmVersion: z.literal(OPERATIONAL_COST_AND_QUOTAS_ALGORITHM_VERSION),
+  lottery: z.object({
+    id: z.literal("lotofacil"),
+    definitionVersion: z.literal("1.0.0"),
+  }).strict(),
+  contestNumber: publicPositiveSafeIntegerSchema,
+  catalogProvenance: z.object({
+    catalogRecordId: z.string().uuid(),
+    sourceSnapshotId: z.string().uuid(),
+    sourceUrl: z.url(),
+    parserVersion: z.string().min(1),
+    validations: z.array(z.string().min(1)).min(1),
+    persistedAt: z.string().datetime({ offset: true }),
+  }).strict(),
+  purchasedBase: z.object({
+    type: z.enum(["SOURCE_BETS", "EXPANDED_SIMPLE_BETS"]),
+    betSize: z.number().int().min(15).max(20),
+    occurrenceCount: publicPositiveSafeIntegerSchema,
+    unitPriceCents: publicPositiveSafeIntegerSchema,
+    candidateOrderingVersion: z.literal(
+      OPERATIONAL_COST_AND_QUOTAS_CANDIDATE_ORDERING_VERSION,
+    ),
+    bets: z.array(operationalCostCanonicalBetSchema).min(1),
+  }).strict(),
+  officialCostCents: publicPositiveSafeIntegerSchema,
+  fee: z.object({
+    feeBps: z.number().int().min(0).max(OPERATIONAL_COST_MAXIMUM_FEE_BPS),
+    feeScaleBps: z.literal(OPERATIONAL_COST_FEE_SCALE_BPS),
+    base: z.literal("OFFICIAL_COST_OF_EFFECTIVELY_PURCHASED_PORTFOLIO"),
+    roundingRule: z.literal(OPERATIONAL_COST_FEE_ROUNDING_RULE),
+    feeCents: publicNonNegativeSafeIntegerSchema,
+  }).strict(),
+  totalCents: publicPositiveSafeIntegerSchema,
+  quotaAllocation: z.object({
+    quotaCount: publicPositiveSafeIntegerSchema,
+    baseQuotaCents: publicPositiveSafeIntegerSchema,
+    remainderCents: publicNonNegativeSafeIntegerSchema,
+    distributionRule: z.literal(OPERATIONAL_COST_QUOTA_DIVISION_RULE),
+    appliedCaixaShareLimits: z.object({
+      betSize: z.number().int().min(15).max(20),
+      minShares: publicPositiveSafeIntegerSchema,
+      maxShares: publicPositiveSafeIntegerSchema,
+      maxGamesPerReceiptApplied: z.literal(false),
+    }).strict(),
+    quotas: z.array(z.object({
+      quotaId: publicPositiveSafeIntegerSchema,
+      valueCents: publicPositiveSafeIntegerSchema,
+      receivedRemainderCent: z.boolean(),
+    }).strict()).min(1),
+  }).strict(),
+  transient: z.literal(true),
+  persisted: z.literal(false),
+  frozen: z.literal(false),
+  portfolioStateChanged: z.literal(false),
+  paymentPerformed: z.literal(false),
+}).strict().superRefine((result, context) => {
+  const canonicalKeys = result.purchasedBase.bets.map(({ numbers }) => numbers.join(","));
+  for (let index = 1; index < canonicalKeys.length; index += 1) {
+    if (canonicalKeys[index - 1]! > canonicalKeys[index]!) {
+      context.addIssue({
+        code: "custom",
+        path: ["purchasedBase", "bets", index],
+        message: "Purchased bets must use the canonical ASCII bytewise ordering.",
+      });
+    }
+  }
+  if (
+    result.purchasedBase.occurrenceCount !== result.purchasedBase.bets.length ||
+    result.purchasedBase.bets.some(({ numbers }) =>
+      numbers.length !== result.purchasedBase.betSize
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["purchasedBase"],
+      message: "Purchased base size and occurrence count must match its bets.",
+    });
+  }
+  if (
+    result.purchasedBase.type === "EXPANDED_SIMPLE_BETS" &&
+    result.purchasedBase.betSize !== 15
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["purchasedBase", "betSize"],
+      message: "Expanded simple bets must use bet size 15.",
+    });
+  }
+
+  const expectedOfficialCost = BigInt(result.purchasedBase.occurrenceCount) *
+    BigInt(result.purchasedBase.unitPriceCents);
+  const expectedFeeNumerator = expectedOfficialCost * BigInt(result.fee.feeBps);
+  const feeWhole = expectedFeeNumerator / BigInt(OPERATIONAL_COST_FEE_SCALE_BPS);
+  const feeRemainder = expectedFeeNumerator % BigInt(OPERATIONAL_COST_FEE_SCALE_BPS);
+  const expectedFee = feeWhole + (
+    2n * feeRemainder >= BigInt(OPERATIONAL_COST_FEE_SCALE_BPS) ? 1n : 0n
+  );
+  const expectedTotal = expectedOfficialCost + expectedFee;
+  if (
+    expectedOfficialCost !== BigInt(result.officialCostCents) ||
+    expectedFee !== BigInt(result.fee.feeCents) ||
+    expectedTotal !== BigInt(result.totalCents)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["officialCostCents"],
+      message: "Cost, fee and total must satisfy the normative integer formulas.",
+    });
+  }
+
+  const { quotaAllocation } = result;
+  const quotaIds = quotaAllocation.quotas.map(({ quotaId }) => quotaId);
+  const expectedBase = BigInt(result.totalCents) / BigInt(quotaAllocation.quotaCount);
+  const expectedRemainder = BigInt(result.totalCents) % BigInt(quotaAllocation.quotaCount);
+  if (
+    quotaAllocation.quotaCount !== quotaAllocation.quotas.length ||
+    new Set(quotaIds).size !== quotaIds.length ||
+    expectedBase !== BigInt(quotaAllocation.baseQuotaCents) ||
+    expectedRemainder !== BigInt(quotaAllocation.remainderCents)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["quotaAllocation"],
+      message: "Quota count, base and remainder must satisfy the normative division.",
+    });
+  }
+  quotaAllocation.quotas.forEach((quota, index) => {
+    const receivesRemainder = BigInt(index) < expectedRemainder;
+    const expectedValue = expectedBase + (receivesRemainder ? 1n : 0n);
+    if (
+      (index > 0 && quotaIds[index - 1]! >= quota.quotaId) ||
+      quota.receivedRemainderCent !== receivesRemainder ||
+      BigInt(quota.valueCents) !== expectedValue
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["quotaAllocation", "quotas", index],
+        message: "Quotas must be ordered and match the floor-plus-remainder allocation.",
+      });
+    }
+  });
+  const allocatedTotal = quotaAllocation.quotas.reduce(
+    (sum, quota) => sum + BigInt(quota.valueCents),
+    0n,
+  );
+  const limits = quotaAllocation.appliedCaixaShareLimits;
+  if (
+    allocatedTotal !== BigInt(result.totalCents) ||
+    limits.betSize !== result.purchasedBase.betSize ||
+    limits.minShares > quotaAllocation.quotaCount ||
+    limits.maxShares < quotaAllocation.quotaCount ||
+    limits.minShares > limits.maxShares
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["quotaAllocation"],
+      message: "Quota allocation must conserve total and satisfy the applied share limits.",
+    });
+  }
+});
+export type LotofacilOperationalCostAndQuotasResult = z.infer<
+  typeof lotofacilOperationalCostAndQuotasResultSchema
+>;
+
+function sameOperationalCostBets(
+  left: readonly OperationalCostCanonicalBet[],
+  right: readonly OperationalCostCanonicalBet[],
+): boolean {
+  return left.length === right.length && left.every((bet, index) =>
+    bet.numbers.length === right[index]!.numbers.length &&
+    bet.numbers.every((number, numberIndex) =>
+      number === right[index]!.numbers[numberIndex]
+    )
+  );
+}
+
+export const lotofacilOperationalCostAndQuotasExecutionSchema = z.object({
+  request: lotofacilOperationalCostAndQuotasRequestSchema,
+  result: lotofacilOperationalCostAndQuotasResultSchema,
+}).strict().superRefine(({ request, result }, context) => {
+  const requestBetSize = request.purchasedBase.bets[0]!.numbers.length;
+  const expectedBets = request.purchasedBase.bets
+    .map(({ numbers }) => ({ numbers: [...numbers] }))
+    .sort((left, right) => {
+      const leftKey = left.numbers.join(",");
+      const rightKey = right.numbers.join(",");
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+    });
+  const price = request.catalog.priceByBetSize.find(
+    ({ betSize }) => betSize === requestBetSize,
+  );
+  const limits = request.catalog.bolaoLimits.find(
+    ({ betSize }) => betSize === requestBetSize,
+  );
+  const expectedQuotaIds = [...request.quotaIds].sort((left, right) => left - right);
+  const actualQuotaIds = result.quotaAllocation.quotas.map(({ quotaId }) => quotaId);
+  if (
+    result.contestNumber !== request.contestNumber ||
+    result.lottery.id !== request.lotteryDefinition.id ||
+    result.lottery.definitionVersion !== request.lotteryDefinition.version ||
+    result.catalogProvenance.catalogRecordId !== request.catalog.id ||
+    result.catalogProvenance.sourceSnapshotId !== request.catalog.sourceSnapshotId ||
+    result.catalogProvenance.sourceUrl !== request.catalog.sourceUrl ||
+    result.catalogProvenance.parserVersion !== request.catalog.parserVersion ||
+    result.catalogProvenance.persistedAt !== request.catalog.persistedAt ||
+    result.catalogProvenance.validations.length !== request.catalog.validations.length ||
+    result.catalogProvenance.validations.some(
+      (validation, index) => validation !== request.catalog.validations[index],
+    ) ||
+    result.purchasedBase.type !== request.purchasedBase.type ||
+    result.purchasedBase.betSize !== requestBetSize ||
+    !sameOperationalCostBets(result.purchasedBase.bets, expectedBets) ||
+    result.purchasedBase.unitPriceCents !== price?.priceInCents ||
+    result.fee.feeBps !== request.feeBps ||
+    result.quotaAllocation.appliedCaixaShareLimits.betSize !== requestBetSize ||
+    result.quotaAllocation.appliedCaixaShareLimits.minShares !== limits?.minShares ||
+    result.quotaAllocation.appliedCaixaShareLimits.maxShares !== limits?.maxShares ||
+    actualQuotaIds.length !== expectedQuotaIds.length ||
+    actualQuotaIds.some((quotaId, index) => quotaId !== expectedQuotaIds[index])
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["result"],
+      message: "Operational cost result must correspond exactly to its request.",
+    });
+  }
+});
+
+export function validateLotofacilOperationalCostAndQuotasResult(
+  request: LotofacilOperationalCostAndQuotasRequest,
+  result: unknown,
+): LotofacilOperationalCostAndQuotasResult {
+  return lotofacilOperationalCostAndQuotasExecutionSchema.parse({
+    request,
+    result,
+  }).result;
+}
+
+export interface OperationalCostAndQuotasCalculationInput {
+  readonly occurrenceCount: number;
+  readonly unitPriceCents: number;
+  readonly feeBps: number;
+  readonly quotaIds: readonly number[];
+  readonly minShares: number;
+  readonly maxShares: number;
+}
+
+export interface OperationalCostAndQuotasCalculationResult {
+  readonly officialCostCents: number;
+  readonly feeCents: number;
+  readonly totalCents: number;
+  readonly baseQuotaCents: number;
+  readonly remainderCents: number;
+  readonly quotas: readonly {
+    readonly quotaId: number;
+    readonly valueCents: number;
+    readonly receivedRemainderCent: boolean;
+  }[];
+}
+
+export interface PreparedOperationalCostAndQuotasRequest<TContext> {
+  readonly calculation: OperationalCostAndQuotasCalculationInput;
+  readonly context: TContext;
+}
+
+/** Lottery-owned normalization and result boundary around the modality-neutral engine. */
+export interface OperationalCostAndQuotasAdapter<TContext, TResult> {
+  prepare(input: unknown): PreparedOperationalCostAndQuotasRequest<TContext>;
+  buildResult(
+    prepared: PreparedOperationalCostAndQuotasRequest<TContext>,
+    calculation: OperationalCostAndQuotasCalculationResult,
+  ): unknown;
+  validateResult(
+    prepared: PreparedOperationalCostAndQuotasRequest<TContext>,
+    result: unknown,
+  ): TResult;
 }

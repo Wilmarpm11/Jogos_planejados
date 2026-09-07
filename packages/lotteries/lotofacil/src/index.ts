@@ -3,14 +3,34 @@ import {
   CANONICAL_BET_EXPANSION_CONTRACT_VERSION,
   DEFAULT_RARITY_THRESHOLDS,
   EXACT_COVERAGE_TIERS,
+  OPERATIONAL_COST_AND_QUOTAS_ALGORITHM_VERSION,
+  OPERATIONAL_COST_AND_QUOTAS_CANDIDATE_ORDERING_VERSION,
+  OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION,
+  OPERATIONAL_COST_DEFAULT_FEE_BPS,
+  OPERATIONAL_COST_FEE_ROUNDING_RULE,
+  OPERATIONAL_COST_FEE_SCALE_BPS,
+  OPERATIONAL_COST_MAXIMUM_FEE_BPS,
+  OPERATIONAL_COST_QUOTA_DIVISION_RULE,
   STRUCTURAL_BAND_ORDER,
+  AmbiguousPurchasedCostBaseError,
+  HeterogeneousPurchasedCostPortfolioError,
+  IncompatibleOperationalCostCatalogError,
+  InvalidOperationalCostAndQuotasRequestError,
+  InvalidPurchasedCostBetError,
+  InvalidQuotaIdsError,
+  InvalidServiceFeeBpsError,
+  UnsupportedOperationalCostLotteryError,
   type AxisName,
   type AxisOccupancy,
   type AxisOccupancyMetric,
   type AxisRarityAssessment,
   createDeterministicRandom,
   canonicalBetExpansionRequestSchema,
+  lotteryDefinitionSchema,
+  lotofacilOperationalCostAndQuotasRequestSchema,
+  operationalCostCanonicalBetSchema,
   validateCanonicalBetExpansionResult,
+  validateLotofacilOperationalCostAndQuotasResult,
   type ExpandedCoverageCompositionExpansionAdapter,
   type CanonicalBetExpansionResult,
   type ExactFraction,
@@ -19,6 +39,11 @@ import {
   type RarityThresholds,
   type LotteryDefinition,
   type LotteryMetricEngine,
+  type LotofacilOperationalCostAndQuotasRequest,
+  type LotofacilOperationalCostAndQuotasResult,
+  type OperationalCostAndQuotasAdapter,
+  type OperationalCostAndQuotasCalculationResult,
+  type PreparedOperationalCostAndQuotasRequest,
   type PortfolioGenerationRequest,
   type PortfolioGenerationResult,
   type PortfolioGenerator,
@@ -31,6 +56,7 @@ import {
   type StructuralSummary,
   type TheoreticalAxisDistribution,
   type TheoreticalDistributionBucket,
+  lotofacilCatalogRecordSchema,
 } from "@boloes/lottery-contracts";
 import {
   binomialCoefficient,
@@ -68,6 +94,8 @@ export const LOTOFACIL_DIVERSITY_OPTIMIZATION_ADAPTER_VERSION =
   "lotofacil-diversity-optimization/1.0.0";
 export const LOTOFACIL_CANONICAL_GAME_ORDER_VERSION =
   "locale-compare-of-comma-joined-canonical-games/1.0.0";
+export const LOTOFACIL_OPERATIONAL_COST_CANDIDATE_ORDERING_VERSION =
+  OPERATIONAL_COST_AND_QUOTAS_CANDIDATE_ORDERING_VERSION;
 export const LOTOFACIL_STRUCTURAL_ALLOCATION_ALGORITHM_VERSION =
   "lotofacil-largest-remainder/1.0.0";
 export const LOTOFACIL_CANONICAL_FORMULA_VERSION = "1.0.0";
@@ -296,6 +324,250 @@ export function compareLotofacilCanonicalGames(
 ): number {
   return left.join(",").localeCompare(right.join(","));
 }
+
+/** Story 4.10-only ordinal ordering; the Story 4.9 comparator remains unchanged. */
+export function compareLotofacilOperationalCostGames(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  const leftKey = left.join(",");
+  const rightKey = right.join(",");
+  return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+}
+
+interface LotofacilOperationalCostContext {
+  readonly request: LotofacilOperationalCostAndQuotasRequest;
+  readonly betSize: number;
+  readonly bets: readonly { readonly numbers: readonly number[] }[];
+  readonly unitPriceCents: number;
+  readonly minShares: number;
+  readonly maxShares: number;
+}
+
+const operationalCostRequestKeys = new Set([
+  "contractVersion",
+  "lotteryDefinition",
+  "contestNumber",
+  "catalog",
+  "purchasedBase",
+  "quotaIds",
+  "feeBps",
+]);
+const operationalCostRequiredRequestKeys = [
+  "contractVersion",
+  "lotteryDefinition",
+  "contestNumber",
+  "catalog",
+  "purchasedBase",
+  "quotaIds",
+] as const;
+
+function isOperationalCostRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function prepareLotofacilOperationalCostRequest(
+  input: unknown,
+): PreparedOperationalCostAndQuotasRequest<LotofacilOperationalCostContext> {
+  if (
+    !isOperationalCostRecord(input) ||
+    Object.keys(input).some((key) => !operationalCostRequestKeys.has(key)) ||
+    operationalCostRequiredRequestKeys.some((key) => !(key in input)) ||
+    input.contractVersion !== OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION ||
+    !Number.isSafeInteger(input.contestNumber) ||
+    (input.contestNumber as number) <= 0
+  ) {
+    throw new InvalidOperationalCostAndQuotasRequestError();
+  }
+
+  const definition = lotteryDefinitionSchema.strict().safeParse(input.lotteryDefinition);
+  if (!definition.success) {
+    throw new InvalidOperationalCostAndQuotasRequestError(definition.error.message);
+  }
+  if (!isLotofacilDefinition(definition.data)) {
+    throw new UnsupportedOperationalCostLotteryError();
+  }
+
+  const feeBps = "feeBps" in input ? input.feeBps : OPERATIONAL_COST_DEFAULT_FEE_BPS;
+  if (
+    typeof feeBps !== "number" ||
+    !Number.isInteger(feeBps) ||
+    feeBps < 0 ||
+    feeBps > OPERATIONAL_COST_MAXIMUM_FEE_BPS
+  ) {
+    throw new InvalidServiceFeeBpsError();
+  }
+
+  const catalog = lotofacilCatalogRecordSchema.safeParse(input.catalog);
+  if (!catalog.success) {
+    throw new IncompatibleOperationalCostCatalogError(catalog.error.message);
+  }
+
+  const purchasedBase = input.purchasedBase;
+  if (
+    !isOperationalCostRecord(purchasedBase) ||
+    (purchasedBase.type !== "SOURCE_BETS" &&
+      purchasedBase.type !== "EXPANDED_SIMPLE_BETS") ||
+    !Array.isArray(purchasedBase.bets) ||
+    Object.keys(purchasedBase).some((key) => key !== "type" && key !== "bets")
+  ) {
+    throw new AmbiguousPurchasedCostBaseError();
+  }
+  if (purchasedBase.bets.length === 0) throw new InvalidPurchasedCostBetError();
+
+  const bets = purchasedBase.bets.map((bet) => {
+    const parsed = operationalCostCanonicalBetSchema.safeParse(bet);
+    if (!parsed.success) throw new InvalidPurchasedCostBetError(parsed.error.message);
+    return parsed.data;
+  });
+  const betSize = bets[0]!.numbers.length;
+  if (
+    purchasedBase.type === "SOURCE_BETS" &&
+    bets.some(({ numbers }) => numbers.length !== betSize)
+  ) {
+    throw new HeterogeneousPurchasedCostPortfolioError();
+  }
+  if (
+    purchasedBase.type === "EXPANDED_SIMPLE_BETS" &&
+    bets.some(({ numbers }) => numbers.length !== LOTOFACIL_DEFINITION.drawSize)
+  ) {
+    throw new InvalidPurchasedCostBetError(
+      "EXPANDED_SIMPLE_BETS accepts only 15-number bets.",
+    );
+  }
+
+  const price = catalog.data.priceByBetSize.find((entry) => entry.betSize === betSize);
+  const limits = catalog.data.bolaoLimits.find((entry) => entry.betSize === betSize);
+  if (!price || !limits) {
+    throw new IncompatibleOperationalCostCatalogError(
+      "The Lotofácil catalog lacks price or quota limits for the purchased bet size.",
+    );
+  }
+
+  const quotaIds = input.quotaIds;
+  if (
+    !Array.isArray(quotaIds) ||
+    quotaIds.length === 0 ||
+    quotaIds.some((quotaId) =>
+      typeof quotaId !== "number" ||
+      !Number.isSafeInteger(quotaId) ||
+      quotaId <= 0
+    ) ||
+    new Set(quotaIds).size !== quotaIds.length
+  ) {
+    throw new InvalidQuotaIdsError();
+  }
+
+  const request = lotofacilOperationalCostAndQuotasRequestSchema.safeParse(input);
+  if (!request.success) {
+    throw new InvalidOperationalCostAndQuotasRequestError(request.error.message);
+  }
+  return {
+    calculation: {
+      occurrenceCount: bets.length,
+      unitPriceCents: price.priceInCents,
+      feeBps,
+      quotaIds: request.data.quotaIds,
+      minShares: limits.minShares,
+      maxShares: limits.maxShares,
+    },
+    context: {
+      request: request.data,
+      betSize,
+      bets: bets
+        .map(({ numbers }) => ({ numbers: [...numbers] }))
+        .sort((left, right) =>
+          compareLotofacilOperationalCostGames(left.numbers, right.numbers)
+        ),
+      unitPriceCents: price.priceInCents,
+      minShares: limits.minShares,
+      maxShares: limits.maxShares,
+    },
+  };
+}
+
+function buildLotofacilOperationalCostResult(
+  prepared: PreparedOperationalCostAndQuotasRequest<LotofacilOperationalCostContext>,
+  calculation: OperationalCostAndQuotasCalculationResult,
+): LotofacilOperationalCostAndQuotasResult {
+  const { request, betSize, bets, unitPriceCents, minShares, maxShares } = prepared.context;
+  return {
+    contractVersion: OPERATIONAL_COST_AND_QUOTAS_CONTRACT_VERSION,
+    algorithmVersion: OPERATIONAL_COST_AND_QUOTAS_ALGORITHM_VERSION,
+    lottery: {
+      id: request.lotteryDefinition.id,
+      definitionVersion: request.lotteryDefinition.version,
+    },
+    contestNumber: request.contestNumber,
+    catalogProvenance: {
+      catalogRecordId: request.catalog.id,
+      sourceSnapshotId: request.catalog.sourceSnapshotId,
+      sourceUrl: request.catalog.sourceUrl,
+      parserVersion: request.catalog.parserVersion,
+      validations: [...request.catalog.validations],
+      persistedAt: request.catalog.persistedAt,
+    },
+    purchasedBase: {
+      type: request.purchasedBase.type,
+      betSize,
+      occurrenceCount: prepared.calculation.occurrenceCount,
+      unitPriceCents,
+      candidateOrderingVersion: LOTOFACIL_OPERATIONAL_COST_CANDIDATE_ORDERING_VERSION,
+      bets: bets.map(({ numbers }) => ({ numbers: [...numbers] })),
+    },
+    officialCostCents: calculation.officialCostCents,
+    fee: {
+      feeBps: prepared.calculation.feeBps,
+      feeScaleBps: OPERATIONAL_COST_FEE_SCALE_BPS,
+      base: "OFFICIAL_COST_OF_EFFECTIVELY_PURCHASED_PORTFOLIO",
+      roundingRule: OPERATIONAL_COST_FEE_ROUNDING_RULE,
+      feeCents: calculation.feeCents,
+    },
+    totalCents: calculation.totalCents,
+    quotaAllocation: {
+      quotaCount: prepared.calculation.quotaIds.length,
+      baseQuotaCents: calculation.baseQuotaCents,
+      remainderCents: calculation.remainderCents,
+      distributionRule: OPERATIONAL_COST_QUOTA_DIVISION_RULE,
+      appliedCaixaShareLimits: {
+        betSize,
+        minShares,
+        maxShares,
+        maxGamesPerReceiptApplied: false,
+      },
+      quotas: calculation.quotas.map((quota) => ({ ...quota })),
+    },
+    transient: true,
+    persisted: false,
+    frozen: false,
+    portfolioStateChanged: false,
+    paymentPerformed: false,
+  };
+}
+
+/** Lotofácil normalization/result bridge around the modality-neutral Story 4.10 engine. */
+export const lotofacilOperationalCostAndQuotasAdapter:
+  OperationalCostAndQuotasAdapter<
+    LotofacilOperationalCostContext,
+    LotofacilOperationalCostAndQuotasResult
+  > = {
+  prepare: prepareLotofacilOperationalCostRequest,
+  buildResult: buildLotofacilOperationalCostResult,
+  validateResult(prepared, result) {
+    try {
+      return validateLotofacilOperationalCostAndQuotasResult(
+        prepared.context.request,
+        result,
+      );
+    } catch (error) {
+      throw new InvalidOperationalCostAndQuotasRequestError(
+        error instanceof Error
+          ? error.message
+          : "The calculated result violates its public contract.",
+      );
+    }
+  },
+};
 
 /** Expands one canonical Lotofácil source bet into all simple 15-number bets. */
 export function expandLotofacilCanonicalBet(
