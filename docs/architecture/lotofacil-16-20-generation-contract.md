@@ -137,9 +137,13 @@ Ela é carregada e validada uma vez, então injetada no adaptador. A geração n
 pode reconstruir políticas/massas, executar as duas enumerações da 4.11 nem
 depender de caminho sob `tests/`.
 
-A fixture normativa 4.11 permanece como oráculo independente. Um teste compara
-bytes e hashes entre ela e o artefato empacotado; divergência bloqueia a suíte.
-Nenhum comando atualiza qualquer uma das cópias automaticamente.
+A comparação de bytes e hashes entre o artefato runtime e a fixture normativa
+4.11 prova integridade da cópia empacotada; divergência bloqueia a suíte. Ela
+não constitui validação matemática independente. Esta provém do oráculo DFS
+da Story 4.11, que deriva limites e massas sem importar módulos produtivos,
+e de sua comparação com os artefatos normativos. A 4.12 preserva essa evidência
+e suas regressões; não repete a enumeração na geração. Nenhum comando atualiza
+qualquer uma das cópias automaticamente.
 
 ### 3.4 Resultado estrito
 
@@ -195,6 +199,14 @@ caminho v1 de 15. Request e resultado são validados conjuntamente; divergência
 de quantidade, tamanho, versões, política, faixas, ordenação ou flags invalida
 o resultado antes da publicação.
 
+**Aprovação de Produto — 2026-09-09:** na Story 4.12, a comparação numérica
+posição por posição, decidida pela primeira dezena diferente, substitui
+explicitamente a proposta anterior de ASCII bytewise. Ordenar somente após
+concluir a seleção, preservando o conjunto, as quantidades e as alocações;
+não usar `localeCompare` ou `Intl.Collator`. Mantém-se
+`candidateOrderingVersion = "lotofacil-numeric-lexicographic-canonical-games/1.0.0"`.
+As ordenações e os resultados das Stories 4.9 e 4.10 permanecem preservados.
+
 ## 4. Algoritmo determinístico
 
 1. Fazer preflight completo do schema, definição, modo, contagem, universo e
@@ -212,10 +224,10 @@ o resultado antes da publicação.
 5. Encerrar quando todas as quantidades forem atendidas ou quando o universo
    se esgotar. Esgotamento inesperado sem atendimento integral é falha
    determinística de alocação e nunca publica o acumulado.
-6. Depois do evento `FINALIZE_RESULT`, verificar `AbortSignal` novamente,
-   ordenar candidatos pelo comparador v2, construir o resultado completo,
-   validar request/resultado conjuntamente, verificar `AbortSignal` uma última
-   vez e somente então publicar o JSON final.
+6. Depois do evento `FINALIZE_RESULT`, verificar `AbortSignal`, ordenar os
+   candidatos, construir e validar conjuntamente o resultado. Antes de
+   disponibilizá-lo, executar a barreira de event loop e a nova verificação
+   descritas na seção 6; a CLI repete essa proteção após serializar o JSON.
 
 Para uma seed JavaScript, a versão `prngVersion` percorre exatamente seus code
 units UTF-16, sem normalização Unicode e sem recodificação UTF-8:
@@ -316,16 +328,50 @@ O evento inicial usa `SELECT_CANDIDATES`, `visitedRanks = 0` e
 do relógio. `FINALIZE_RESULT` ocorre exatamente uma vez; em `NEUTRAL`,
 `structuralCounts` é sempre `null`; em `ADVANCED`, contém as cinco faixas.
 
+`SELECT_CANDIDATES` e `FINALIZE_RESULT` são fases anteriores à publicação;
+nenhuma delas muda sua fronteira. A seção 6.1 é a única definição normativa
+do início da publicação, da barreira final, do SIGINT tardio e da falha de escrita.
+
 Na CLI-first, a ação existente `portfolio generate --input PATH` despacha o
 request discriminado para v1 ou v2 sem reinterpretá-lo. Para v2:
 
 - `stdout` fica reservado ao único JSON final validado;
 - progresso e diagnóstico estruturados usam somente JSONL em `stderr`;
-- cancelamento por `SIGINT` produz exit `130`, sem stdout e sem resultado
-  parcial;
+- cancelamento por `SIGINT` observado antes da fronteira da seção 6.1 produz
+  exit `130`, sem stdout e sem resultado parcial; após essa fronteira,
+  aplicam-se o tratamento de SIGINT tardio e de falha de escrita da mesma seção;
 - request inválido, limite, incompatibilidade de política e alocação inviável
   falham antes de resultado, com erro público estruturado e exit não zero;
 - nenhum timeout é iniciado ou reportado como aplicado no contrato `1.0.0`.
+
+### 6.1 Barreira final e início da publicação
+
+Depois do trabalho síncrono de finalização, a API deve ceder realmente ao
+event loop, permitindo um novo ciclo de processamento de I/O/sinais, e só
+então verificar novamente `AbortSignal` antes de resolver com o resultado.
+Na CLI, preparar todo o JSON em memória, repetir a barreira e a verificação,
+e somente então iniciar a escrita. Em Node.js, usar duas passagens sucessivas
+por `setImmediate` (a segunda agendada na continuação da primeira), ou
+equivalente comprovado por teste de subprocesso; uma Promise já resolvida,
+`queueMicrotask` ou `process.nextTick` não substitui essa barreira.
+
+Na API, resolver a Promise disponibiliza um resultado integralmente validado;
+isso não garante sua entrega pelo transporte. Na CLI,
+a publicação se inicia no ato de invocar a primeira e única escrita do JSON
+final em stdout. Entre a última verificação e esse ato não há `await`,
+callback de usuário ou trabalho de serialização/validação. Até esse ponto,
+cancelamento observado na CLI resulta no erro estruturado existente, exit
+`130` e stdout vazio. Depois dele, SIGINT tardio não cancela essa operação nem a
+reclassifica como `130`; o handler permanece ativo enquanto a escrita conclui,
+e o sucesso exige a conclusão da escrita, sem forçar saída antes do flush.
+Falha de escrita continua sendo falha da CLI, com exit `1` se o processo
+puder tratá-la, e nunca pode ser reportada como sucesso ou cancelamento.
+
+Essa é a fronteira de atomicidade da operação, não uma garantia de escrita
+atômica do sistema operacional: falha do destino stdout ou término forçado
+do processo após o início pode truncar bytes, sem rollback. Não converter
+essa falha em cancelamento nem tratá-la como resultado válido. Não criar
+protocolo, retry ou erro de IPC para esse caso.
 
 ## 7. Erros públicos
 
@@ -352,6 +398,41 @@ são:
 - `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`;
 - `INVALID_PORTFOLIO_GENERATION_V2_RESULT`.
 
+### 7.1 Precedência do preflight v2
+
+Retornar somente o erro da primeira etapa inválida, nesta ordem fixa:
+
+A validação estrutural verifica campos ausentes/desconhecidos, tipos e shapes.
+Também pertencem ao erro de request suas regras de boa formação: literais
+fixos do envelope/definição, seeds não vazias, formato de hashes, percentuais
+válidos e contagem inteira segura positiva. A validação semântica subsequente
+verifica os domínios de tamanho/modo, o teto, a referência da política e a
+viabilidade da alocação, cada qual com seu código específico.
+
+| Ordem | Validação | Código público |
+| --- | --- | --- |
+| 1 | Estrutura/schema: campos ausentes/desconhecidos, tipos, literais fixos, seeds vazias, formato dos hashes e shape do ramo reconhecido; contagem não inteira segura positiva; alocação com chaves/percentuais/soma inválidos | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| 2 | `strategy.betSize` inteiro fora de 16–20 | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
+| 3 | `strategy.mode` string fora de `NEUTRAL`/`ADVANCED` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
+| 4 | Contagem positiva acima de `min(10.000, C(25, betSize))` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
+| 5 | Identidade/versões/hashes de política divergentes do artefato ou `policy.betSize` diferente de `strategy.betSize` | `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` |
+| 6 | Quantidades por maiores restos excedem as massas disponíveis | `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE` |
+
+Na etapa 1, os valores de tamanho e modo são verificados quanto ao tipo; seus
+domínios são reservados às etapas 2–3. Não aplicar antes delas um enum de modo
+ou refinamento 16–20 que converta todo valor não suportado em erro genérico.
+Assim, inteiro `15` em v2 chega ao erro de tamanho e string `"UNSUPPORTED"`
+chega ao erro de modo quando não existir violação anterior. Para modo
+desconhecido, verificar a estrutura comum e os campos de alocação presentes,
+sem presumir um ramo.
+Formato de referência inválido pertence à etapa 1; divergência contra a
+política validada pertence à etapa 5. Uma alocação malformada pertence à etapa
+1; alocação válida, mas matematicamente inviável, pertence à etapa 6.
+Essa separação não relaxa o schema público: o request só é aceito após todas
+as etapas. Não depender da ordem de propriedades do JSON nem da ordem de
+issues produzidas pelo validador. Todos esses erros têm exit `1`, sem progresso
+ou stdout. Falhas da CLI anteriores ao despacho mantêm a fronteira já descrita.
+
 O mapeamento distingue a origem da falha:
 
 - domínio/validação: request inválido usa
@@ -365,15 +446,16 @@ O mapeamento distingue a origem da falha:
   cancelamento, usa `INVALID_PORTFOLIO_GENERATION_V2_RESULT`; o código expressa
   a impossibilidade de publicar resultado válido, sem expor a exceção interna;
 - cancelamento cooperativo por `AbortSignal`, inclusive acionado por `SIGINT`,
-  usa `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`.
+  observado antes da fronteira da seção 6.1 usa
+  `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`.
 
 Esses casos usam somente o envelope e os exits desta seção, com stdout vazio
 em falha ou cancelamento e sem resultado parcial.
 
 Entrada inválida nunca provoca progresso. Falha de execução ou validação e
 cancelamento nunca publicam candidato parcial. Sucesso usa exit `0`; qualquer
-erro não relacionado a cancelamento usa exit `1`; cancelamento, inclusive por
-SIGINT, usa exit `130`. As mensagens são determinísticas por código e nunca
+erro não relacionado a cancelamento usa exit `1`; cancelamento observado antes
+da fronteira da seção 6.1, inclusive por SIGINT, usa exit `130`. As mensagens são determinísticas por código e nunca
 controlam fluxo.
 
 Falhas da CLI antes do despacho v1/v2 — ausência de `--input`, falha de
@@ -443,6 +525,8 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
 1. Schemas estritos: campos desconhecidos em todos os níveis, uniões de modo,
    política/versão/hash incompatíveis, alocação maior que a massa disponível e
    resultado conjunto inválido.
+   Verificar os vetores de violações simultâneas da seção 11.1, incluindo a
+   alcançabilidade dos erros específicos de tamanho e modo.
 2. Bordas: aceitar `candidateCount` 1 e 10.000; rejeitar 10.001 e, para cada
    tamanho 16–20, rejeitar `candidateCount = C(25,k)` porque todos esses
    universos excedem o teto técnico de 10.000. Toda rejeição ocorre no
@@ -456,6 +540,17 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
 7. Progresso monotônico, distância máxima de 1.024 ranks para cooperação,
    `AbortSignal` inclusive durante `FINALIZE_RESULT` e imediatamente antes da
    publicação, `SIGINT`/130, stdout vazio e ausência de parcial.
+   Em subprocesso, sincronizar pelo evento `FINALIZE_RESULT` e usar uma
+   barreira exclusiva do harness dentro da finalização síncrona para enviar
+   SIGINT real antes de liberá-la; não depender de sleeps nem simular apenas
+   `AbortController.abort()` no callback. Exigir erro de cancelamento, exit
+   `130` e zero bytes em stdout; o teste deve falhar se o yield for removido
+   ou substituído apenas por microtasks. Cobrir também o trabalho síncrono de
+   serialização CLI, o sucesso sem sinal e o sinal posterior ao início da
+   escrita, que não pode reclassificar a operação como cancelada.
+   Injetar falha de escrita após a fronteira: resultado matemático válido não
+   implica entrega bem-sucedida; exigir falha, nunca exit `0`, e não exigir
+   rollback dos bytes já escritos.
 8. `timeoutApplied: false` e ausência de temporizador normativo.
 9. CLI: stdout com um JSON final; progresso/diagnóstico JSONL somente em
    stderr; exits e erros públicos determinísticos.
@@ -469,11 +564,49 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
 11. Determinismo entre execuções/ambientes suportados e memória proporcional ao
     resultado solicitado, não ao universo; vetores ASCII e não ASCII do PRNG,
     além de vetores de unranking e da permutação completa.
+12. Ordenação numérica aprovada por Produto em 2026-09-09: vetores de 16
+    dezenas devem distinguir comparação numérica de comparação textual das
+    representações decimais sem zero à esquerda. Na primeira posição,
+    `[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]` precede
+    `[10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]`; após prefixo comum,
+    `[1,2,11,12,13,14,15,16,17,18,19,20,21,22,23,24]` precede
+    `[1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]`. A comparação textual
+    inverte ambos os pares. Verificar igualdade e preservação do conjunto,
+    quantidades e alocações após ordenar, com regressões 4.9/4.10 intactas.
+13. Integridade: comparar bytes/hashes runtime–fixture e falhar por divergência.
+    Validação matemática: preservar as regressões contra o oráculo independente
+    da Story 4.11. Igualdade entre duas cópias não substitui esse oráculo.
 
 O oráculo de ranking/unranking e alocação deve ser independente do caminho
 produtivo, existir somente em testes e não reutilizar a função sob teste. Seus
 vetores são revisados e fixos; nenhum comando produtivo ou teste pode atualizar
 fixtures automaticamente.
+
+### 11.1 Vetores de precedência
+
+Partir de um request v2 `ADVANCED` válido, `betSize = 16`, `candidateCount = 1`,
+alocação de 100% em `zeroExtremes` (demais faixas em 0) e referência exata da
+fixture 4.11. Cada linha altera somente os campos indicados. `policyId =
+"inexistente"` mantém a forma da referência, mas diverge da política normativa.
+
+| Alterações simultâneas | Código esperado |
+| --- | --- |
+| Adicionar campo de topo `extra`; `strategy.betSize = 15` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| `strategy.betSize = 15`; `strategy.mode = "UNSUPPORTED"` | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
+| `strategy.mode = "UNSUPPORTED"`; `candidateCount = 10001` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
+| `candidateCount = 10001`; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
+| `candidateCount = 3173`; alocação 100% em `fourPlusExtremes` e 0 nas demais; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` |
+| Remover `structuralAllocation.zeroExtremes`; `candidateCount = 10001` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| `candidateCount = 0`, `-1` ou `1.5` (casos separados); `strategy.mode = "UNSUPPORTED"` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+
+`candidateCount` e `structuralAllocation` na tabela abreviam, respectivamente,
+`parameters.candidateCount` e `strategy.structuralAllocation`. A massa normativa
+de `FOUR_PLUS_EXTREMES` para 16 é 3.172: restaurando somente o `policyId`
+normativo no quinto vetor, o erro esperado passa a
+`LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE`. Os vetores isolados de tamanho
+15 e modo `"UNSUPPORTED"` também devem retornar seus códigos específicos.
+Permutar a ordem das propriedades JSON em todos os níveis deve preservar
+código, mensagem fixa, exit `1` e ausência de progresso/stdout em cada caso.
 
 ## 12. Dependências e gates
 

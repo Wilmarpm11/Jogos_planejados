@@ -188,6 +188,11 @@ Nesse fluxo v2, o escopo de FR-04.1 fica restrito aos modos `NEUTRAL` e
 `ADVANCED` acima: `cohortId`, `auxiliaryConstraints`, `hypothesisRefs` e
 campos experimentais são rejeitados, mesmo como contexto opcional. Os schemas
 são estritos em todos os níveis e rejeitam qualquer campo desconhecido.
+A precedência v2 é estrutura do request → tamanho → modo → contagem →
+política → viabilidade da alocação. Os domínios de tamanho/modo são avaliados
+após a estrutura, preservando seus erros específicos; contagem não positiva
+ou não inteira é erro de request, excesso do teto é erro de limite. A ordem
+das propriedades JSON não altera o erro, conforme o contrato da Story 4.12.
 
 Na primeira entrega da distribuição estrutural de carteira, somente candidatos
 canônicos da Lotofácil simples de 15 dezenas são aplicáveis. O auditor reutiliza
@@ -340,8 +345,14 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   não padrão, recomendação de compra, limite comercial ou limite definitivo;
   10.001 é rejeitado antes do progresso. A API assíncrona verifica cancelamento
   e cede o event loop no máximo a cada 1.024 ranks, emite progresso estruturado
-  em JSONL somente no stderr e não publica stdout ou resultado parcial em falha
-  ou cancelamento; SIGINT retorna 130. A versão inicial não aplica timeout e
+  em JSONL somente no stderr. Após finalização e serialização, há yield real
+  ao event loop e nova verificação de cancelamento antes da primeira chamada
+  de escrita do JSON final em stdout. Falha de geração ou cancelamento observado
+  antes dessa fronteira mantém stdout vazio; cancelamento retorna 130. Depois
+  dela, SIGINT tardio não reclassifica a operação. Resultado integralmente
+  validado não garante entrega: falha de escrita continua sendo falha, nunca
+  sucesso, e stdout não oferece rollback de bytes já enviados pelo transporte.
+  A versão inicial não aplica timeout e
   registra `timeoutApplied: false`. Aumento de teto exige benchmark, revisão
   arquitetural e versão apropriada.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
