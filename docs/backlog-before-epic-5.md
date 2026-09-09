@@ -1,6 +1,7 @@
 # Backlog obrigatório antes do Épico 5
 
-**Status:** planejamento — Stories 4.10 e 4.11 `Done`; Story 4.12 `Draft`; Épico 4 aberto
+**Status:** planejamento — Stories 4.10 e 4.11 `Done`; Story 4.12 `Ready` após
+F5-IPC-SPEC/4.12, Arquitetura `PASS`, SM `PASS` e PO `GO`; Épico 4 aberto
 **Data:** 2026-09-07
 **Escopo protegido:** a Story 4.9 permanece concluída e não é alterada por este
 backlog.
@@ -22,9 +23,9 @@ Fontes: `docs/prd.md` — FR-02, FR-05, FR-06, FR-07, §§5, 7 e 9–11;
 | Ordem | Item | Depende de | Libera |
 | --- | --- | --- | --- |
 | 1 | Story 4.10 — cálculo operacional de custo e cotas (FR-06), `Done` em `main@f04a9ec` | catálogo CAIXA versionado da 3.5 e contrato `1.0` aprovado | composição monetária auditável do relatório do Épico 5 |
-| 2 | Story 4.11 — políticas e massas estruturais Lotofácil 16–20, `Done` pelo PR #11 em `main@390c7cd` | métricas, ocupação, faixas e manifesto das 2.1–2.5; contrato `1.0` aprovado | pré-requisito matemático da geração 16–20; não promove a 4.12 sem `F5-IPC-SPEC` e os demais gates |
-| 3 | Gate F5-IPC-SPEC — especificação Tauri/TypeScript–Python | operações e limites computacionais candidatos identificados | decisão versionada sobre a fronteira de execução da 4.12 e sobre o primeiro uso autorizado de Python |
-| 4 | Story 4.12 — geração completa de apostas 16–20 | Story 4.11 concluída; contrato/gerador da 4.2; fronteira de expansão da 4.7; F5-IPC-SPEC aprovado | geração de apostas-fonte 16–20 sem alterar o comportamento de 15; se Python for obrigatório, F5-IPC-DONE também precede o código |
+| 2 | Story 4.11 — políticas e massas estruturais Lotofácil 16–20, `Done` pelo PR #11 em `main@390c7cd` | métricas, ocupação, faixas e manifesto das 2.1–2.5; contrato `1.0` aprovado | pré-requisito matemático da geração 16–20 |
+| 3 | Gate F5-IPC-SPEC/4.12 — fronteira da geração, **concluído** | Story 4.11 e benchmarks read-only | decisão `IN_PROCESS_TYPESCRIPT_LIMITED` e contrato v2; não baixa o F5-IPC geral do Épico 5 |
+| 4 | Story 4.12 — geração completa de apostas 16–20 | Story 4.11 concluída; contrato/gerador da 4.2; fronteira de expansão da 4.7; F5-IPC-SPEC/4.12 aprovado | geração de apostas-fonte 16–20 sem alterar o comportamento de 15; não depende de F5-IPC-DONE |
 | 5 | Gate F5-PERSIST-DONE — fundação de persistência local | contratos dos artefatos que serão persistidos identificados; no mínimo custo/cotas 4.10 e carteira/auditorias já estáveis | relatório, aprovação, revisões e `FrozenPortfolio` persistidos |
 | 6 | Gate F5-IPC-DONE — implementação e conformidade IPC | F5-IPC-SPEC aprovado; primeira operação e packaging definidos | integração desktop e eventual operação Python autorizada sem contrato implícito |
 | Paralelo de design | Plano UX da capa/tela inicial | pode ser elaborado agora; implementação depende de F5-PERSIST-DONE e F5-IPC-DONE, ambos com QA `PASS` | story futura de interface do Épico 5 |
@@ -32,11 +33,10 @@ Fontes: `docs/prd.md` — FR-02, FR-05, FR-06, FR-07, §§5, 7 e 9–11;
 
 4.10, 4.11 e 4.12 são entregas separadas. A fundação também possui dois
 enablers independentes: persistência local não implica IPC, e IPC não autoriza
-migrar automaticamente cálculos TypeScript para Python. `F5-IPC-SPEC` é o gate
-documental que antecede a prontidão da 4.12; `F5-IPC-DONE` é o gate de saída da
-implementação/conformidade e antecede o Épico 5 e a UI. Se a especificação
-escolher Python para a 4.12, `F5-IPC-DONE` passa a anteceder também a
-implementação da própria 4.12.
+migrar automaticamente cálculos TypeScript para Python. A disposição
+`F5-IPC-SPEC/4.12` foi concluída com TypeScript limitado e não exige
+`F5-IPC-DONE` para a story. O gate IPC geral e `F5-IPC-DONE` continuam
+pendentes e antecedem o Épico 5 e a UI.
 
 ## Story 4.10 — FR-06: custo e cotas
 
@@ -162,9 +162,9 @@ e versionado pela implementação concluída.
 
 ## Story 4.12 — geração completa 16–20
 
-**Status preservado:** `Draft`. A Story 4.11 satisfez somente o pré-requisito
-matemático; `F5-IPC-SPEC`, as decisões contratuais e os demais gates abaixo
-continuam bloqueando a promoção para `Ready`.
+**Estado do gate:** `Ready`. O pré-requisito 4.11 e o `F5-IPC-SPEC/4.12` estão
+concluídos; o contrato recebeu Arquitetura `PASS`, SM `PASS` e PO `GO`. Nenhuma
+implementação foi iniciada ou autorizada por este registro.
 
 ### Resultado esperado
 
@@ -177,30 +177,35 @@ continuam bloqueando a promoção para `Ready`.
   congelamento e UI como chamadas separadas; a extensão não as habilita
   automaticamente para 16–20.
 
-### Decisões pendentes para ficar Ready
+### Decisões aprovadas para ficar Ready
 
-1. Modos/estratégias autorizados para cada `betSize` e vínculo exato com 4.11.
-2. Limites de candidatos e trabalho por tamanho, incluindo progresso,
-   cancelamento e eventual timeout.
-3. Semântica de seed/versionamento ao ampliar o gerador sem mudar 15.
-4. Erros públicos para política ausente, alocação inviável e limite excedido.
-5. Relação explícita com otimização de diversidade, expansão e cobertura,
-   especialmente a inelegibilidade atual de 19–20 na composição limitada a
-   1.000 ocorrências.
-6. Fronteira de execução aprovada no `F5-IPC-SPEC`: TypeScript limitado ou
-   processo Python. Nenhuma das opções é escolhida neste backlog; se Python for
-   obrigatório, o enabler IPC deve estar `Done` com QA `PASS` antes do código.
+1. `IN_PROCESS_TYPESCRIPT_LIMITED`; Python/IPC permanece na fundação do Épico 5.
+2. API v2 assíncrona; API, comparador e resultados v1 de 15 imutáveis.
+3. `NEUTRAL` e `ADVANCED`; este último somente por alocação explícita nas cinco
+   faixas, com maiores restos. Núcleo, sinais auxiliares e E individuais não
+   filtram; não há estratégia experimental 16–20.
+4. `candidateCount` entre 1 e `min(10.000, C(25,k))`; 10.001 falha antes de
+   progresso. O teto é técnico por execução, não recomendação ou limite final.
+5. Progresso JSONL em stderr, cancelamento cooperativo em até 1.024 ranks,
+   SIGINT/130, sem parcial, sem timeout normativo e `timeoutApplied: false`.
+6. Políticas 4.11 são consumidas por identidade/versões/hashes. Diversidade,
+   cobertura e auditorias permanecem restritas até stories próprias.
+7. Escala por partição determinística/lotes/cursor é futura; várias seeds
+   independentes não são autorizadas como substituto de unicidade global.
 
 ### Definition of Ready
 
-- Story 4.11 está `Done` com gate PASS.
-- `F5-IPC-SPEC` está aprovado e decidiu explicitamente a fronteira da execução;
-  quando exigir Python, `F5-IPC-DONE` também está concluído com QA `PASS`.
-- Contrato de entrada/saída, limites e erros estão congelados por tamanho.
-- Testes de reprodução, validade, unicidade, fronteiras combinatórias,
-  alocação e regressão de 15 possuem oráculos definidos.
-- Decisão de reuso: estender o contrato existente de geração, restringir as
-  políticas ao adaptador Lotofácil e não criar skill nova.
+- [x] Story 4.11 está `Done` com gate PASS.
+- [x] `F5-IPC-SPEC/4.12` aprovou `IN_PROCESS_TYPESCRIPT_LIMITED`; o IPC geral
+  continua separado e não bloqueia a implementação desta story.
+- [x] Contrato de entrada/saída, limites, ordenação e erros estão congelados.
+- [x] Testes de reprodução, validade, unicidade, fronteiras combinatórias,
+  alocação, observabilidade e regressão de 15 possuem oráculos definidos.
+- [x] Decisão de capacidade: criar API v2 aditiva; reutilizar gerador, PRNG,
+  permutação, combinatória e classificador; restringir políticas à Lotofácil e
+  não criar skill nova.
+- [x] Arquitetura `PASS`, SM `PASS` e PO `GO` registrados no pacote em
+  2026-09-07.
 
 ## Fundação técnica anterior ao Épico 5
 
@@ -208,10 +213,11 @@ O detalhamento está em
 `docs/architecture/epic-5-technical-foundation-plan.md`. Antes de qualquer
 implementação, F5-PERSIST deve decidir o agregado persistido, identidades,
 versões, imutabilidade, auditoria, erros, atomicidade, recuperação e limites.
-F5-IPC deve primeiro passar por `SPEC`, decidindo serialização,
+Para a 4.12, o F5-IPC-SPEC foi encerrado escolhendo TypeScript limitado. O
+Enabler I geral deve, separadamente, passar por `SPEC`, decidindo serialização,
 envelope/versionamento, operações, progresso, cancelamento, erros, limites e
 empacotamento Tauri/TypeScript–Python, e depois por `DONE`, que exige
-implementação/conformidade com QA `PASS`.
+implementação/conformidade com QA `PASS` antes do Épico 5 e da UI.
 
 As duas capacidades exigem contratos reutilizáveis e testes de contrato; não
 exigem skill AIOX. Regras específicas da Lotofácil permanecem em seu adaptador.

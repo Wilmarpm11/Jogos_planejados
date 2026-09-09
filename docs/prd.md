@@ -1,4 +1,4 @@
-# PRD v0.4.14 - Plataforma de Engenharia de Bolões
+# PRD v0.4.15 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
@@ -25,6 +25,7 @@
 | 2026-09-05 | 0.4.12 | Contrato P0 de custo/cotas fechado: taxa em basis points, HALF_UP, quotaId numérico, base homogênea discriminada e limites de cotas do catálogo | Produto / PO / Arquitetura |
 | 2026-09-05 | 0.4.13 | Política estrutural 16–20 fechada: métricas preservadas, limites por cauda exata, E9/E10 normalizados, faixas/núcleo próprios e enumeração integral | Produto / Análise / PO / Arquitetura |
 | 2026-09-07 | 0.4.14 | Gate de políticas e massas 16–20 concluído pela Story 4.11, com QA, revisão remota, fixtures e hashes preservados | QA / PO / SM |
+| 2026-09-07 | 0.4.15 | F5-IPC-SPEC/4.12 fechado: geração 16–20 em TypeScript limitado, API v2, modos P0, teto, observabilidade e compatibilidade aprovados; IPC geral permanece pendente para o Épico 5 | Produto / PO / Arquitetura / SM |
 
 ## 1. Objetivo e contexto
 
@@ -175,6 +176,19 @@ interseções, distribuição estrutural, cobertura bruta e única, redundância
 eficiência. Cobertura aproximada deve declarar método, limite e erro; nunca pode
 ser exibida como exata.
 
+Na geração P0 de apostas-fonte Lotofácil 16–20, a fronteira aprovada é
+`IN_PROCESS_TYPESCRIPT_LIMITED`, por API v2 assíncrona e aditiva. São suportados
+`NEUTRAL` e `ADVANCED`; este último exige alocação explícita somente nas faixas
+0/1/2/3/4+ e usa maiores restos. Núcleo, sinais auxiliares e regras E individuais
+não são filtros, e não há estratégia experimental 16–20. A API, o comparador e
+os resultados v1 de 15 permanecem inalterados. Python/IPC continua fora desta
+story e reservado à fundação técnica do Épico 5.
+
+Nesse fluxo v2, o escopo de FR-04.1 fica restrito aos modos `NEUTRAL` e
+`ADVANCED` acima: `cohortId`, `auxiliaryConstraints`, `hypothesisRefs` e
+campos experimentais são rejeitados, mesmo como contexto opcional. Os schemas
+são estritos em todos os níveis e rejeitam qualquer campo desconhecido.
+
 Na primeira entrega da distribuição estrutural de carteira, somente candidatos
 canônicos da Lotofácil simples de 15 dezenas são aplicáveis. O auditor reutiliza
 o MetricEngine, o StructuralClassifier e o resumo estrutural canônicos para
@@ -321,6 +335,15 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   e do primeiro progresso. O benchmark local de uma fonte de 18 dezenas, com
   816 ocorrências simples, concluiu expansão e cobertura em aproximadamente
   3,13 segundos no ambiente de referência.
+  A geração P0 de apostas-fonte Lotofácil 16–20 aceita de 1 a 10.000 candidatos
+  por execução e nunca mais que `C(25, betSize)`. O teto de 10.000 é técnico,
+  não padrão, recomendação de compra, limite comercial ou limite definitivo;
+  10.001 é rejeitado antes do progresso. A API assíncrona verifica cancelamento
+  e cede o event loop no máximo a cada 1.024 ranks, emite progresso estruturado
+  em JSONL somente no stderr e não publica stdout ou resultado parcial em falha
+  ou cancelamento; SIGINT retorna 130. A versão inicial não aplica timeout e
+  registra `timeoutApplied: false`. Aumento de teto exige benchmark, revisão
+  arquitetural e versão apropriada.
 - **NFR-05 - Impressão:** dimensões em mm, PDF vetorial e validação visual/física
   por template.
 - **NFR-06 - Licença:** derivados do INJOLOCA obedecem GPL-3.0-or-later.
@@ -653,6 +676,11 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   CodeRabbit `SUCCESS`, regressão bloqueante de 15, fixture, índice, seis
   `policyHash` e seis `massHash` preservados. O manifesto foi estendido apenas
   de modo aditivo e versionado.
+- [x] Definir a fronteira e o contrato P0 da geração Lotofácil 16–20. O
+  `F5-IPC-SPEC/4.12` selecionou `IN_PROCESS_TYPESCRIPT_LIMITED` e o contrato
+  `docs/architecture/lotofacil-16-20-generation-contract.md` fixa API v2,
+  modos, teto, progresso, cancelamento, compatibilidade e isolamento. Essa
+  decisão não conclui o contrato IPC geral nem `F5-IPC-DONE` do Épico 5.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
   simples, timeout de 30 s e erro zero, conforme
@@ -663,8 +691,9 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   importação/sincronização/fallback e respectivos gates QA.
 - [ ] Anexar PDF/foto/medidas finais do COLOGA ou ensaio equivalente.
 - [ ] Homologar template A4 em impressora/driver/papel/loteria de teste.
-- [ ] Definir o contrato entre interface TypeScript/Tauri e motor Python, incluindo
-  serialização canônica, versão do motor e empacotamento local.
+- [ ] Definir o contrato geral entre interface TypeScript/Tauri e motor Python,
+  incluindo serialização canônica, versão do motor e empacotamento local. Esse
+  gate permanece pendente para o Épico 5; Python/IPC não integra a Story 4.12.
 
 ## 12. Evidências e fontes
 

@@ -3,15 +3,14 @@
 **Data da auditoria:** 2026-09-07
 
 **Base auditada:** `main` e `origin/main` em
-`390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c`, com branch administrativa
-`docs/4.11-post-merge-closure` criada a partir desse commit
+`5ecb01f7768d7b8e2bc2d3895b7f11b88f7e9e63`, após o fechamento
+administrativo da Story 4.11 pelo PR #12
 
 **Decisão:** Épico 4 permanece aberto
 
 ## Estado verificado
 
-- A `main` local foi atualizada exclusivamente por fast-forward e coincide com
-  `origin/main` em `390c7cd`.
+- A `main` local coincide com `origin/main` em `5ecb01f`.
 - A Story 4.8 foi incorporada pelo PR #7, com gate QA `PASS`, score 100 e
   regressão integral de 174 testes registrada no artefato de qualidade.
 - A Story 4.9 foi incorporada pelo PR #8 no merge commit `9b91318`, com gate QA
@@ -22,20 +21,18 @@
 - A Story 4.11 foi incorporada pelo PR #11 no squash `390c7cd`, com gate QA
   `PASS` 100/100, CodeRabbit `SUCCESS` e fixture, índice, seis `policyHash` e
   seis `massHash` preservados.
-- A Story 4.12 permanece `Draft`, sem implementação; a conclusão da 4.11
-  satisfaz somente seu pré-requisito matemático.
+- A Story 4.12 está `Ready` e sem implementação. A Story 4.11 e a disposição
+  `F5-IPC-SPEC/4.12` estão concluídas, com Arquitetura `PASS`, SM `PASS` e PO
+  `GO`.
 - Nenhuma branch foi removida durante esta auditoria.
-- As alterações administrativas foram isoladas na branch
-  `docs/4.11-post-merge-closure`, criada a partir de `390c7cd`; ela é a branch
-  ativa deste trabalho e não faz parte do inventário de limpeza.
 
 ## Parecer de encerramento
 
 As Stories 4.1–4.11 estão incorporadas à `main`, mas o Épico 4 ainda não pode
-ser encerrado enquanto a Story 4.12 permanecer `Draft` e pendente. Antes de sua
-promoção para `Ready`, o gate `F5-IPC-SPEC` e as demais decisões contratuais
-devem ser concluídos. A entrada no Épico 5 também exige os gates fundacionais
-de persistência e IPC descritos em `docs/backlog-before-epic-5.md`.
+ser encerrado enquanto a Story 4.12 não for implementada, validada e concluída.
+O `F5-IPC-SPEC/4.12` selecionou TypeScript limitado e fechou seu contrato; isso
+não conclui a story nem os gates fundacionais de persistência e IPC exigidos
+para a entrada no Épico 5.
 
 ## Classificação das pendências
 
@@ -44,7 +41,7 @@ de persistência e IPC descritos em `docs/backlog-before-epic-5.md`.
 | Otimização de diversidade | Entregue e incorporada pela Story 4.9 | Política, contrato, implementação e QA estão concluídos no PR #8 e em `main@9b91318`. |
 | Cálculo operacional de custo e cotas (FR-06) | Story 4.10, `Done` | Implementação, QA e fechamento concluídos pelo PR #10 em `main@f04a9ec`. |
 | Políticas e massas 16–20 | Story 4.11, `Done` | Implementação versionada, fixture, hashes, QA e revisão concluídos pelo PR #11 em `main@390c7cd`. [closure-key: 4.11:commit:390c7cd4db44bbe0a2a7c92cb3ca467760b1bd4c] |
-| Geração de apostas 16–20 | Story 4.12, `Draft` | O pré-requisito 4.11 está concluído, mas `F5-IPC-SPEC` e as decisões próprias ainda bloqueiam `Ready`; nenhuma geração foi implementada. |
+| Geração de apostas 16–20 | Story 4.12, `Ready` | 4.11 e `F5-IPC-SPEC/4.12` concluídos com os pareceres exigidos; nenhuma geração foi implementada e o Épico 4 permanece aberto. |
 | Persistência local e IPC Tauri/Python | Fundação técnica anterior ao Épico 5 | Contratos, identidades, auditoria, erros, limites e packaging ainda precisam ser decididos; nenhuma implementação está autorizada. |
 | Relatório pré-impressão | Escopo explícito do Épico 5 | Não é débito da Story 4.8; depende de custo/cotas e deve compor resultados existentes sem recalculá-los. |
 | Aprovação e `FrozenPortfolio` | Escopo explícito do Épico 5 | Os tipos/hash básicos existem, mas o fluxo, a revisão e a persistência de congelamento ainda não. |
@@ -73,12 +70,11 @@ de persistência e IPC descritos em `docs/backlog-before-epic-5.md`.
 3. **Story 4.11 — Políticas e massas estruturais versionadas Lotofácil
    16–20.** Concluída e incorporada pelo PR #11 em `390c7cd`, sem reutilizar
    parâmetros de 15.
-4. **Gate F5-IPC-SPEC — especificação Tauri/TypeScript–Python.** Decide, sem
-   implementar, se a Story 4.12 permanece em TypeScript limitado ou exige uma
-   operação no worker Python.
+4. **Gate F5-IPC-SPEC/4.12 — fronteira da geração.** Concluído sem código com
+   `IN_PROCESS_TYPESCRIPT_LIMITED`; o IPC geral do Épico 5 permanece pendente.
 5. **Story 4.12 — Geração determinística de apostas Lotofácil 16–20.** P1;
-   depende da Story 4.11 e de F5-IPC-SPEC; se Python for escolhido, depende
-   também de F5-IPC-DONE antes do código.
+   depende da Story 4.11 e do contrato F5-IPC-SPEC/4.12, ambos satisfeitos; não
+   depende de F5-IPC-DONE e ainda não foi implementada.
 6. **Gate F5-PERSIST-DONE — Persistência local.** Define primeiro o agregado,
    identidades, versões, auditoria, erros e limites; depois implementa e valida
    sua conformidade em story própria.
@@ -157,19 +153,15 @@ sem achados. O commit final da branch foi `2c9dc3c` e o PR #8 foi incorporado à
 
 ### Para as stories seguintes
 
-1. Story 4.12: modos autorizados, limites, compatibilidade de seed, erros e
-   fronteiras com diversidade/expansão/cobertura por tamanho.
-2. F5-PERSIST: inventário persistido, identidades, mutabilidade, versionamento,
+1. F5-PERSIST: inventário persistido, identidades, mutabilidade, versionamento,
    auditoria, atomicidade, recuperação, erros e limites; contrato aprovado não
    equivale ao gate de saída `F5-PERSIST-DONE`.
-3. F5-IPC-SPEC: envelope, serialização, operações, progresso, cancelamento,
-   erros, limites, compatibilidade, empacotamento local e a fronteira de
-   execução da 4.12; permanece bloqueante antes de promover a Story 4.12 para
-   `Ready`.
-4. F5-IPC-DONE: implementação aplicável e conformidade cruzada do contrato; é
-   bloqueante para a 4.12 somente se o SPEC escolher Python, e sempre bloqueia
-   a entrada no Épico 5 e a implementação da UI.
-5. Épico 5: decidir quais achados bloqueiam aprovação, conteúdo/identidade do
+2. F5-IPC-SPEC geral: envelope, serialização, operações Python autorizadas,
+   progresso, cancelamento, erros, limites, compatibilidade e empacotamento
+   local; a disposição TypeScript da 4.12 não fecha esse contrato.
+3. F5-IPC-DONE: implementação aplicável e conformidade cruzada do contrato;
+   bloqueia a entrada no Épico 5 e a implementação da UI, não a Story 4.12.
+4. Épico 5: decidir quais achados bloqueiam aprovação, conteúdo/identidade do
    relatório, ato de aprovação, fronteira do hash, revisões e navegação/conteúdo
    da tela inicial.
 
