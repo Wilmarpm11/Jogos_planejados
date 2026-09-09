@@ -85,9 +85,8 @@ pendentes.
 
 ```text
 4.10 FR-06 custo/cotas ───────────────> F5-PERSIST-DONE ─────────────┐
-4.11 políticas/massas 16–20 ─> F5-IPC-SPEC ─> 4.12 geração 16–20 ───┤
+4.11 políticas/massas 16–20 ─> F5-IPC-SPEC/4.12 PASS ─> 4.12 ───────┤
 contratos matemáticos estáveis ─> F5-IPC-SPEC ─> F5-IPC-DONE ────────┴─> Épico 5 CLI
-                                      └─ se 4.12 usar Python ─> 4.12
 
 planejamento UX da capa/tela inicial ────────────────────────────────┐
 F5-PERSIST-DONE PASS + F5-IPC-DONE PASS ─────────────────────────────┴─> implementação UI
@@ -97,32 +96,66 @@ F5-PERSIST-DONE PASS + F5-IPC-DONE PASS ─────────────�
 | --- | --- | --- |
 | Story 4.10 — FR-06 | Catálogo CAIXA versionado e decisão de Produto já registrada | Contrato puro de custo/cotas, base comprada inequívoca, valores em centavos e proveniência do catálogo. |
 | Story 4.11 — políticas/massas 16–20 | Fórmula e métricas canônicas existentes | Política versionada por tamanho 16–20 e massas de teste aprovadas, sem reutilizar a massa de 15. |
-| Gate F5-IPC-SPEC | Story 4.11 e inventário das operações pesadas candidatas | Contrato IPC aprovado e decisão explícita sobre execução limitada em TypeScript ou por worker Python na 4.12. |
-| Story 4.12 — geração 16–20 | Story 4.11 e F5-IPC-SPEC; se a especificação exigir Python, também F5-IPC-DONE com QA `PASS` | Resultados transitórios versionados e compatibilidade explícita com o contrato de geração existente. |
+| Gate F5-IPC-SPEC/4.12 — fronteira da geração | Story 4.11 e benchmarks das operações candidatas | **Concluído:** `IN_PROCESS_TYPESCRIPT_LIMITED`; contrato v2 em `lotofacil-16-20-generation-contract.md`; Python/IPC fora da 4.12. |
+| Story 4.12 — geração 16–20 | Story 4.11 e F5-IPC-SPEC/4.12 aprovados | Resultados transitórios versionados e compatibilidade explícita com o contrato de geração existente. Não depende de F5-IPC-DONE. |
 | Gate F5-PERSIST-DONE | Contratos finais dos artefatos que serão persistidos, inclusive 4.10; decisão sobre como os resultados de 4.12 entram no primeiro conteúdo congelável | Contrato, implementação e conformidade da persistência aprovados com QA `PASS`. |
 | Gate F5-IPC-DONE | F5-IPC-SPEC, primeira operação e packaging aprovados | Protocolo, runner/worker aplicável, suíte de conformidade e packaging aprovados com QA `PASS`. |
 | Épico 5 | F5-PERSIST-DONE e F5-IPC-DONE, ambos com QA `PASS`, além das stories prévias exigidas pelo item consumidor | Relatório CLI-first, aprovação/congelamento e revisão sem lógica de UI ou impressão física antecipada. |
 | UX da capa/tela inicial | Fluxo e linguagem de Produto | Planejamento visual pode avançar agora; implementação somente após os dois enablers. |
 
 Os itens 4.10, 4.11 e 4.12 continuam separados. A dependência 4.11 → 4.12 é
-rígida. `F5-IPC-SPEC` também antecede a prontidão da 4.12 para decidir sua
-fronteira de execução sem pressupor tecnologia. Se o gate escolher uma execução
-TypeScript limitada, a 4.12 não depende da implementação IPC; se escolher
-Python, `F5-IPC-DONE` passa a ser bloqueante antes do código. Qualquer execução
-Python precisa ser autorizada operação por operação no Enabler I.
+rígida. A disposição `F5-IPC-SPEC/4.12` selecionou
+`IN_PROCESS_TYPESCRIPT_LIMITED`; portanto a 4.12 não depende da implementação
+IPC. Isso não conclui o Enabler I geral: `F5-IPC-DONE` continua bloqueante para
+o Épico 5 e para a UI, e qualquer execução Python futura precisa ser autorizada
+operação por operação.
 
 ### 3.1 Dois gates distintos para o IPC
 
-- **F5-IPC-SPEC — gate documental:** fecha I-01–I-14, aprova o contrato
-  versionado e decide a fronteira TypeScript/Python da 4.12. Ele ocorre antes da
-  4.12 ficar `Ready` e não autoriza implementação.
+- **F5-IPC-SPEC/4.12 — disposição documental da operação:** concluída com
+  `IN_PROCESS_TYPESCRIPT_LIMITED` e contrato v2 versionado. Fecha somente a
+  fronteira, os modos e os limites da geração 16–20; não implementa código nem
+  fecha I-01–I-14 do IPC geral.
+- **F5-IPC-SPEC geral — gate documental do Enabler I:** deve fechar I-01–I-14,
+  aprovar o protocolo versionado e autorizar cada operação Python. Continua
+  pendente para a fundação técnica do Épico 5.
 - **F5-IPC-DONE — gate de saída:** exige a implementação aplicável de
   protocolo, runner/worker e packaging, testes de contrato e conformidade
-  cruzada e QA `PASS`. Ele antecede o Épico 5 e a interface; também antecede o
-  código da 4.12 quando `F5-IPC-SPEC` selecionar Python.
+  cruzada e QA `PASS`. Ele antecede o Épico 5 e a interface, mas não antecede a
+  4.12 porque sua disposição específica não selecionou Python.
 - A persistência segue a mesma separação entre especificação e entrega. A
   entrada no Épico 5 requer especificamente `F5-PERSIST-DONE` com QA `PASS`, não
   apenas um contrato documental aprovado.
+
+### 3.2 Decisão aprovada para a Story 4.12
+
+O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
+
+- execução TypeScript limitada no mesmo processo, sem Python/IPC;
+- API v2 assíncrona e aditiva, com v1 de 15 imutável;
+- `NEUTRAL` sem alocação no request e com `structuralAllocation` e
+  `structuralCounts` nulos no resultado; `ADVANCED`
+  somente por alocação explícita das cinco faixas;
+- teto técnico de 10.000, também limitado por `C(25, betSize)`;
+- progresso estruturado, cooperação no máximo a cada 1.024 ranks e
+  `timeoutApplied: false`; falha/cancelamento antes da primeira escrita do JSON
+  final deixa stdout vazio. Sucesso usa exit 0; cancelamento observado antes
+  dessa fronteira, inclusive SIGINT, usa exit 130; demais falhas usam exit 1.
+  Após essa fronteira, SIGINT tardio
+  não reclassifica e falha de escrita pode truncar bytes, sem rollback nem sucesso;
+- reutilização do PRNG, permutação, combinatória e classificador 4.11;
+- expansão de escala por partição determinística futura, nunca por várias
+  seeds independentes.
+
+Essa disposição tornou a Story 4.12 `Ready` após `PASS` de Arquitetura,
+validação SM e `GO` do PO em 2026-09-07. O Épico 4 continua aberto até a
+implementação e o fechamento formal da story.
+O gate atual foi revalidado sobre `4.12-readiness/2026-09-09-r2`, incluindo
+cardinalidade, seeds individuais de 1..1024 unidades UTF-16 e API/callback
+aprovados, com thenables malformados controlados, além da ordenação numérica.
+Essas restrições são somente v2 e não limitam o tamanho do arquivo JSON;
+pareceres e revisão local examinada constam na Story 4.12. Isso não conclui
+o IPC geral nem `F5-IPC-DONE`.
 
 ## 4. Enabler P — persistência local de carteira
 
@@ -385,6 +418,7 @@ worker ou migração dos demais motores.
 | Worker acessa banco, histórico, path ou credencial | Quebra de separação e superfície de segurança | I-12, payload mínimo, ambiente restrito e testes de isolamento. |
 | UI contorna contratos CLI/Core | Regras duplicadas e estados divergentes | UI somente após gates; chamadas pelos mesmos casos de uso e contratos. |
 | Massas de 15 vazam para 16–20 | Regra matemática inválida | 4.11 obrigatória antes de 4.12; adaptador Lotofácil versionado e testes por tamanho. |
+| Tratar TypeScript limitado da 4.12 como conclusão do IPC geral | Épico 5 inicia sem protocolo/packaging | Separar `F5-IPC-SPEC/4.12` concluído de I-01–I-14 e `F5-IPC-DONE`, ainda pendentes. |
 
 ## 7. Decisões ainda requeridas
 
