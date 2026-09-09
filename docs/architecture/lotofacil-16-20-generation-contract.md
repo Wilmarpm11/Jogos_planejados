@@ -4,6 +4,10 @@
 
 **Data:** 2026-09-07
 
+**Revalidação documental:** `4.12-readiness/2026-09-09-r1`, posterior à
+ordenação numérica aprovada; pareceres e revisão examinada registrados na
+Story 4.12, seção “Revalidação — 2026-09-09”. Não altera versões de runtime.
+
 **Decisão F5-IPC-SPEC/4.12:** `IN_PROCESS_TYPESCRIPT_LIMITED`
 
 **Versão inicial do contrato:** `lotofacil-16-20-generation/1.0.0`
@@ -29,7 +33,9 @@ A operação recebe somente a definição Lotofácil, uma estratégia resolvida,
 parâmetros de execução e a referência verificável à política estrutural da
 Story 4.11. Não recebe histórico bruto, resultados, coortes brutas, cobertura,
 custo/cotas, banco, caminhos ou credenciais. O resultado é transitório e
-atômico: falha ou cancelamento não publica resultado parcial.
+atômico na produção do resultado: falha ou cancelamento anterior à publicação
+deixa stdout vazio. A entrega por stdout não é atômica: falha de escrita após
+a fronteira da seção 6.1 pode truncar bytes, sem rollback e sem sucesso.
 
 ## 2. Decisão de criar, reutilizar e restringir
 
@@ -115,13 +121,20 @@ silenciosamente substituídos ou igualados.
 - ramo `ADVANCED`: `mode = "ADVANCED"`, `statisticalLabel = "PRODUCTION"` e
   existe `structuralAllocation` com exatamente `zeroExtremes`, `oneExtreme`,
   `twoExtremes`, `threeExtremes` e `fourPlusExtremes`. Cada valor é finito,
-  entre 0 e 100, e a soma segue a tolerância já aprovada pelo contrato de
-  maiores restos para representar 100%.
+  entre 0 e 100. Para a soma calculada `S`, aceitar exatamente
+  `Math.abs(S - 100) <= 1e-9`: tolerância absoluta, não relativa, em pontos
+  percentuais, com comparação inclusiva em aritmética JavaScript `Number`.
 
 As chaves de alocação mapeiam, na mesma ordem, para `ZERO_EXTREMES`,
 `ONE_EXTREME`, `TWO_EXTREMES`, `THREE_EXTREMES` e
 `FOUR_PLUS_EXTREMES`. As quantidades inteiras usam
 `lotofacil-largest-remainder/1.0.0`, inclusive seu desempate estável.
+`calculateLotofacilStructuralAllocationCounts` usa os percentuais recebidos
+sem normalização: `q_i = (p_i * candidateCount) / 100`, piso e distribuição
+dos restos por ordem decrescente, com desempate pela ordem das cinco chaves.
+Não substituir `p_i` por `100 * p_i / S`. A “tolerância zero” da Story 4.9
+refere-se à reconciliação das contagens inteiras solicitadas/realizadas, não
+à soma dos percentuais; o algoritmo reutilizado e seus resultados não mudam.
 
 `cohortId`, `auxiliaryConstraints`, `hypothesisRefs`,
 `MANUAL_EXPERIMENTAL`, estratégias experimentais específicas de 16–20, núcleo
@@ -304,7 +317,7 @@ A API v2 é assíncrona e aceita `AbortSignal` e callback de progresso. Após o
 preflight bem-sucedido, emite um evento inicial, eventos após cada lote de no
 máximo 1.024 ranks e um evento `FINALIZE_RESULT` não terminal depois de
 completar a seleção. Não existe evento de sucesso antes da validação conjunta;
-o JSON validado em stdout é o único terminal de sucesso.
+na CLI, sucesso exige concluir a escrita do JSON final validado, conforme 6.1.
 
 O schema estrito de progresso possui exatamente:
 
@@ -325,7 +338,10 @@ O schema estrito de progresso possui exatamente:
 
 O evento inicial usa `SELECT_CANDIDATES`, `visitedRanks = 0` e
 `selectedCount = 0`. Os campos são monotônicos, derivados de contadores e nunca
-do relógio. `FINALIZE_RESULT` ocorre exatamente uma vez; em `NEUTRAL`,
+do relógio. `FINALIZE_RESULT` ocorre no máximo uma vez por execução, somente
+após concluir a seleção e ao entrar na finalização. Erro ou cancelamento antes
+dessa etapa permite zero emissões. O evento não é terminal e não confirma
+validação, publicação ou sucesso; em `NEUTRAL`,
 `structuralCounts` é sempre `null`; em `ADVANCED`, contém as cinco faixas.
 
 `SELECT_CANDIDATES` e `FINALIZE_RESULT` são fases anteriores à publicação;
@@ -449,8 +465,11 @@ O mapeamento distingue a origem da falha:
   observado antes da fronteira da seção 6.1 usa
   `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`.
 
-Esses casos usam somente o envelope e os exits desta seção, com stdout vazio
-em falha ou cancelamento e sem resultado parcial.
+Esses casos usam somente o envelope e os exits desta seção. Falhas e
+cancelamentos anteriores à fronteira de publicação da seção 6.1 deixam stdout
+vazio, sem resultado parcial. Falha de escrita posterior pode deixar bytes
+truncados, sem rollback: deve ser reportada como falha, nunca como sucesso
+ou cancelamento, conforme 6.1.
 
 Entrada inválida nunca provoca progresso. Falha de execução ou validação e
 cancelamento nunca publicam candidato parcial. Sucesso usa exit `0`; qualquer
@@ -535,11 +554,16 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
    cardinalidade e determinismo por repetição.
 4. `NEUTRAL`: ausência de alocação e de qualquer filtro estrutural.
 5. `ADVANCED`: cinco faixas exatas, maiores restos, desempate estável,
-   quantidades produzidas e alocação inviável sem parcial.
+   quantidades produzidas e alocação inviável sem parcial; tolerância e
+   ausência de normalização conforme os vetores da seção 11.2.
 6. Confirmação de que núcleo, sinais auxiliares e E individuais não filtram.
 7. Progresso monotônico, distância máxima de 1.024 ranks para cooperação,
    `AbortSignal` inclusive durante `FINALIZE_RESULT` e imediatamente antes da
-   publicação, `SIGINT`/130, stdout vazio e ausência de parcial.
+   publicação, `SIGINT`/130, stdout vazio em falha/cancelamento anterior à
+   publicação e ausência de resultado parcial produzido pelo gerador.
+   Verificar zero eventos `FINALIZE_RESULT` quando erro/cancelamento impede
+   entrar na finalização, uma emissão após seleção completa e nenhuma repetição;
+   receber o evento não impede falha/cancelamento posterior antes da publicação.
    Em subprocesso, sincronizar pelo evento `FINALIZE_RESULT` e usar uma
    barreira exclusiva do harness dentro da finalização síncrona para enviar
    SIGINT real antes de liberá-la; não depender de sleeps nem simular apenas
@@ -608,12 +632,45 @@ normativo no quinto vetor, o erro esperado passa a
 Permutar a ordem das propriedades JSON em todos os níveis deve preservar
 código, mensagem fixa, exit `1` e ausência de progresso/stdout em cada caso.
 
+### 11.2 Evidência e vetores de fronteira da alocação
+
+Conferência read-only em `9b3cb82642d84154cfda254bc43f223c54304d99`:
+`packages/lotteries/lotofacil/src/index.ts`, funções
+`validateLotofacilStructuralAllocation` e
+`calculateLotofacilStructuralAllocationCounts`, confirma a seção 3.2.
+`tests/lotofacil/portfolio-generation.test.ts` aceita ruído fracionário e
+rejeita negativos/não finitos; a regressão de maiores restos em
+`tests/portfolio-engine/lotofacil-deterministic-diversity-optimization.test.ts`
+confirma 20/20/20/20/20 para 7 candidatos como 2/2/1/1/1.
+Os dois arquivos passaram (27 testes); não cobrem ainda as fronteiras abaixo.
+
+Testes planejados, sem alterar algoritmo ou fixtures: nas cinco chaves em
+ordem canônica, usar `[50, 50 + u * 2**-46, 0, 0, 0]`, `candidateCount = 7`.
+Os valores e resultados abaixo foram confirmados por sondagem read-only.
+
+| `u` | `Math.abs(S - 100)` observado | Validação / contagens esperadas |
+| ---: | ---: | --- |
+| 0 | 0 | aceita; 4/3/0/0/0 |
+| -70368 | 9.999894245993346e-10 | aceita; 4/3/0/0/0 |
+| 70368 | 9.999894245993346e-10 | aceita; 3/4/0/0/0 |
+| -70369 | 1.0000036354540498e-9 | rejeita soma; em v2, `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`, sem progresso/stdout |
+| 70369 | 1.0000036354540498e-9 | rejeita soma; em v2, `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`, sem progresso/stdout |
+
+A condição inclusiva é aplicada ao desvio calculado, não ao decimal ideal:
+`100 ± 1e-9` em `Number` cai fora da tolerância. Os pares da tabela são os
+vizinhos representáveis de `S` de cada lado da fronteira; não usar epsilon
+extra nem arredondar a soma. Testar também que a entrada não é mutada e os
+percentuais registrados no resultado são os recebidos, mesmo quando `S != 100`;
+as cotas seguem `p_i * candidateCount / 100`, sem renormalização.
+
 ## 12. Dependências e gates
 
 - Story 4.11 `Done`, políticas/massas e hashes disponíveis: satisfeita.
 - F5-IPC-SPEC/4.12 com decisão `IN_PROCESS_TYPESCRIPT_LIMITED`: satisfeita por
   este contrato; não depende de `F5-IPC-DONE` para implementar a Story 4.12.
-- Validação Arquitetura `PASS`, SM e PO `GO`: obrigatórias antes de `Ready`.
+- Validação Arquitetura `PASS`, SM `PASS` e PO `GO`: obrigatórias antes de
+  `Ready`; reexecutadas para o pacote local r1 identificado acima, não apenas
+  herdadas do gate histórico de 07/09.
 - Implementação exige gate QA, lint, typecheck, suíte completa, testes focados,
   regressões e CodeRabbit; este documento não os antecipa.
 - Nenhuma dependência de runtime nova, manifest ou lockfile é prevista.

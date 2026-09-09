@@ -25,11 +25,15 @@ Fontes: `docs/prd.md` — FR-02, FR-05, FR-06, FR-07, §§5, 7 e 9–11;
 | 1 | Story 4.10 — cálculo operacional de custo e cotas (FR-06), `Done` em `main@f04a9ec` | catálogo CAIXA versionado da 3.5 e contrato `1.0` aprovado | composição monetária auditável do relatório do Épico 5 |
 | 2 | Story 4.11 — políticas e massas estruturais Lotofácil 16–20, `Done` pelo PR #11 em `main@390c7cd` | métricas, ocupação, faixas e manifesto das 2.1–2.5; contrato `1.0` aprovado | pré-requisito matemático da geração 16–20 |
 | 3 | Gate F5-IPC-SPEC/4.12 — fronteira da geração, **concluído** | Story 4.11 e benchmarks read-only | decisão `IN_PROCESS_TYPESCRIPT_LIMITED` e contrato v2; não baixa o F5-IPC geral do Épico 5 |
-| 4 | Story 4.12 — geração completa de apostas 16–20 | Story 4.11 concluída; contrato/gerador da 4.2; fronteira de expansão da 4.7; F5-IPC-SPEC/4.12 aprovado | geração de apostas-fonte 16–20 sem alterar o comportamento de 15; não depende de F5-IPC-DONE |
+| 4 | Story 4.12 — geração completa de apostas 16–20 | Story 4.11 concluída; F5-IPC-SPEC/4.12 aprovado; revalidação de Arquitetura/SM/PO registrada na story | geração de apostas-fonte 16–20 sem alterar o comportamento de 15; não depende de F5-IPC-DONE |
 | 5 | Gate F5-PERSIST-DONE — fundação de persistência local | contratos dos artefatos que serão persistidos identificados; no mínimo custo/cotas 4.10 e carteira/auditorias já estáveis | relatório, aprovação, revisões e `FrozenPortfolio` persistidos |
 | 6 | Gate F5-IPC-DONE — implementação e conformidade IPC | F5-IPC-SPEC aprovado; primeira operação e packaging definidos | integração desktop e eventual operação Python autorizada sem contrato implícito |
 | Paralelo de design | Plano UX da capa/tela inicial | pode ser elaborado agora; implementação depende de F5-PERSIST-DONE e F5-IPC-DONE, ambos com QA `PASS` | story futura de interface do Épico 5 |
 | Depois dos gates | Épico 5 — relatório, aprovação, congelamento, revisões e interface | 4.10–4.12 e fundação técnica concluídas conforme o item consumidor | Épico 6 de impressão, sem antecipar impressão física |
+
+Na 4.12, o contrato/gerador da Story 4.2 e a fronteira de expansão da 4.7 são
+referências de reutilização, não gates adicionais de prontidão. A expansão
+4.7 é uma operação posterior explícita, nunca parte da geração.
 
 4.10, 4.11 e 4.12 são entregas separadas. A fundação também possui dois
 enablers independentes: persistência local não implica IPC, e IPC não autoriza
@@ -165,6 +169,9 @@ e versionado pela implementação concluída.
 **Estado do gate:** `Ready`. O pré-requisito 4.11 e o `F5-IPC-SPEC/4.12` estão
 concluídos; o contrato recebeu Arquitetura `PASS`, SM `PASS` e PO `GO`. Nenhuma
 implementação foi iniciada ou autorizada por este registro.
+O gate atual é a revalidação local `4.12-readiness/2026-09-09-r1` registrada
+na Story 4.12, posterior à decisão normativa de ordenação numérica de 09/09;
+não depende apenas dos pareceres históricos de 07/09.
 
 ### Resultado esperado
 
@@ -187,7 +194,10 @@ implementação foi iniciada ou autorizada por este registro.
 4. `candidateCount` entre 1 e `min(10.000, C(25,k))`; 10.001 falha antes de
    progresso. O teto é técnico por execução, não recomendação ou limite final.
 5. Progresso JSONL em stderr, cancelamento cooperativo em até 1.024 ranks,
-   SIGINT/130, sem parcial, sem timeout normativo e `timeoutApplied: false`.
+   sem timeout normativo e `timeoutApplied: false`. Antes da primeira escrita
+   do JSON final, falha/cancelamento deixa stdout vazio e SIGINT observado
+   retorna 130. Depois, SIGINT tardio não reclassifica a operação; falha de
+   escrita pode truncar bytes, sem rollback e nunca como sucesso.
 6. Políticas 4.11 são consumidas por identidade/versões/hashes. Diversidade,
    cobertura e auditorias permanecem restritas até stories próprias.
 7. Escala por partição determinística/lotes/cursor é futura; várias seeds
@@ -204,8 +214,8 @@ implementação foi iniciada ou autorizada por este registro.
 - [x] Decisão de capacidade: criar API v2 aditiva; reutilizar gerador, PRNG,
   permutação, combinatória e classificador; restringir políticas à Lotofácil e
   não criar skill nova.
-- [x] Arquitetura `PASS`, SM `PASS` e PO `GO` registrados no pacote em
-  2026-09-07.
+- [x] Arquitetura `PASS`, SM `PASS` e PO `GO` revalidados no pacote local
+  `4.12-readiness/2026-09-09-r1`, com evidências e escopo na Story 4.12.
 
 ## Fundação técnica anterior ao Épico 5
 

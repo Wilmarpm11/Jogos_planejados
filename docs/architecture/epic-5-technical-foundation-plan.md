@@ -136,8 +136,10 @@ O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
 - `NEUTRAL` sem `structuralAllocation` ou `structuralCounts`; `ADVANCED`
   somente por alocação explícita das cinco faixas;
 - teto técnico de 10.000, também limitado por `C(25, betSize)`;
-- progresso estruturado, cooperação no máximo a cada 1.024 ranks, SIGINT/130,
-  nenhum resultado parcial e `timeoutApplied: false`;
+- progresso estruturado, cooperação no máximo a cada 1.024 ranks e
+  `timeoutApplied: false`; falha/cancelamento antes da primeira escrita do JSON
+  final deixa stdout vazio, com SIGINT/130; após essa fronteira, SIGINT tardio
+  não reclassifica e falha de escrita pode truncar bytes, sem rollback nem sucesso;
 - reutilização do PRNG, permutação, combinatória e classificador 4.11;
 - expansão de escala por partição determinística futura, nunca por várias
   seeds independentes.
@@ -145,6 +147,10 @@ O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
 Essa disposição tornou a Story 4.12 `Ready` após `PASS` de Arquitetura,
 validação SM e `GO` do PO em 2026-09-07. O Épico 4 continua aberto até a
 implementação e o fechamento formal da story.
+O gate atual foi revalidado sobre `4.12-readiness/2026-09-09-r1`, incluindo
+a ordenação numérica aprovada em 09/09 e os cinco achados documentais do PR #13;
+pareceres e revisão local examinada constam na Story 4.12. Isso não conclui
+o IPC geral nem `F5-IPC-DONE`.
 
 ## 4. Enabler P — persistência local de carteira
 

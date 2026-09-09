@@ -24,6 +24,10 @@ administrativo da Story 4.11 pelo PR #12
 - A Story 4.12 está `Ready` e sem implementação. A Story 4.11 e a disposição
   `F5-IPC-SPEC/4.12` estão concluídas, com Arquitetura `PASS`, SM `PASS` e PO
   `GO`.
+- Readiness revalidado localmente em `4.12-readiness/2026-09-09-r1`, após a
+  aprovação da ordenação numérica e o tratamento documental dos cinco achados
+  do PR #13; pareceres atuais e revisão examinada estão na Story 4.12. Este
+  adendo não altera a base histórica da auditoria nem encerra o Épico 4.
 - Nenhuma branch foi removida durante esta auditoria.
 
 ## Parecer de encerramento

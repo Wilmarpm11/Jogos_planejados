@@ -1,9 +1,9 @@
-# PRD v0.4.15 - Plataforma de Engenharia de Bolões
+# PRD v0.4.16 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
 **Modelo de licença:** GPL-3.0-or-later  
-**Última atualização:** 2026-09-07
+**Última atualização:** 2026-09-09
 
 ## Change log
 
@@ -26,6 +26,7 @@
 | 2026-09-05 | 0.4.13 | Política estrutural 16–20 fechada: métricas preservadas, limites por cauda exata, E9/E10 normalizados, faixas/núcleo próprios e enumeração integral | Produto / Análise / PO / Arquitetura |
 | 2026-09-07 | 0.4.14 | Gate de políticas e massas 16–20 concluído pela Story 4.11, com QA, revisão remota, fixtures e hashes preservados | QA / PO / SM |
 | 2026-09-07 | 0.4.15 | F5-IPC-SPEC/4.12 fechado: geração 16–20 em TypeScript limitado, API v2, modos P0, teto, observabilidade e compatibilidade aprovados; IPC geral permanece pendente para o Épico 5 | Produto / PO / Arquitetura / SM |
+| 2026-09-09 | 0.4.16 | Precisões documentais de alocação, publicação e evento não terminal; readiness 4.12 revalidado no pacote local r1, incluindo a ordenação numérica já aprovada | Arquitetura / SM / PO |
 
 ## 1. Objetivo e contexto
 
@@ -179,7 +180,10 @@ ser exibida como exata.
 Na geração P0 de apostas-fonte Lotofácil 16–20, a fronteira aprovada é
 `IN_PROCESS_TYPESCRIPT_LIMITED`, por API v2 assíncrona e aditiva. São suportados
 `NEUTRAL` e `ADVANCED`; este último exige alocação explícita somente nas faixas
-0/1/2/3/4+ e usa maiores restos. Núcleo, sinais auxiliares e regras E individuais
+0/1/2/3/4+ e usa `lotofacil-largest-remainder/1.0.0`: para a soma calculada `S`,
+tolerância absoluta inclusiva `Math.abs(S - 100) <= 1e-9`, sem normalizar os
+percentuais recebidos. As contagens inteiras devem reconciliar exatamente.
+Núcleo, sinais auxiliares e regras E individuais
 não são filtros, e não há estratégia experimental 16–20. A API, o comparador e
 os resultados v1 de 15 permanecem inalterados. Python/IPC continua fora desta
 story e reservado à fundação técnica do Épico 5.
@@ -345,13 +349,15 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   não padrão, recomendação de compra, limite comercial ou limite definitivo;
   10.001 é rejeitado antes do progresso. A API assíncrona verifica cancelamento
   e cede o event loop no máximo a cada 1.024 ranks, emite progresso estruturado
-  em JSONL somente no stderr. Após finalização e serialização, há yield real
+  em JSONL somente no stderr. `FINALIZE_RESULT` é não terminal, emitido no
+  máximo uma vez e somente após seleção completa; erro/cancelamento antes
+  dessa etapa permite zero emissões. Após finalização e serialização, há yield real
   ao event loop e nova verificação de cancelamento antes da primeira chamada
-  de escrita do JSON final em stdout. Falha de geração ou cancelamento observado
+  de escrita do JSON final em stdout. Falha ou cancelamento observado
   antes dessa fronteira mantém stdout vazio; cancelamento retorna 130. Depois
   dela, SIGINT tardio não reclassifica a operação. Resultado integralmente
   validado não garante entrega: falha de escrita continua sendo falha, nunca
-  sucesso, e stdout não oferece rollback de bytes já enviados pelo transporte.
+  sucesso, pode deixar bytes truncados e stdout não oferece rollback.
   A versão inicial não aplica timeout e
   registra `timeoutApplied: false`. Aumento de teto exige benchmark, revisão
   arquitetural e versão apropriada.
@@ -692,6 +698,9 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   `docs/architecture/lotofacil-16-20-generation-contract.md` fixa API v2,
   modos, teto, progresso, cancelamento, compatibilidade e isolamento. Essa
   decisão não conclui o contrato IPC geral nem `F5-IPC-DONE` do Épico 5.
+  A revalidação local `4.12-readiness/2026-09-09-r1`, incluindo a ordenação
+  numérica aprovada em 09/09, tem Arquitetura `PASS`, SM `PASS` e PO `GO`
+  registrados com a revisão examinada na Story 4.12; não autoriza código.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
   simples, timeout de 30 s e erro zero, conforme
