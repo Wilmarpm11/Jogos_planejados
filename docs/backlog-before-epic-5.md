@@ -169,9 +169,9 @@ e versionado pela implementação concluída.
 **Estado do gate:** `Ready`. O pré-requisito 4.11 e o `F5-IPC-SPEC/4.12` estão
 concluídos; o contrato recebeu Arquitetura `PASS`, SM `PASS` e PO `GO`. Nenhuma
 implementação foi iniciada ou autorizada por este registro.
-O gate atual é a revalidação local `4.12-readiness/2026-09-09-r1` registrada
-na Story 4.12, posterior à decisão normativa de ordenação numérica de 09/09;
-não depende apenas dos pareceres históricos de 07/09.
+O gate atual é a revalidação local `4.12-readiness/2026-09-09-r2` registrada
+na Story 4.12, incluindo cardinalidade, seeds/API/callback aprovados e ordenação
+numérica; os pareceres de 07/09 e r1 são históricos, não substituem o gate atual.
 
 ### Resultado esperado
 
@@ -193,7 +193,8 @@ não depende apenas dos pareceres históricos de 07/09.
    filtram; não há estratégia experimental 16–20.
 4. `candidateCount` entre 1 e `min(10.000, C(25,k))`; 10.001 falha antes de
    progresso. O teto é técnico por execução, não recomendação ou limite final.
-5. Progresso JSONL em stderr, cancelamento cooperativo em até 1.024 ranks,
+5. Progresso via callback na API e JSONL em stderr somente na CLI,
+   cancelamento cooperativo em até 1.024 ranks,
    sem timeout normativo e `timeoutApplied: false`. Antes da primeira escrita
    do JSON final, falha/cancelamento deixa stdout vazio e SIGINT observado
    retorna 130. Depois, SIGINT tardio não reclassifica a operação; falha de
@@ -202,6 +203,10 @@ não depende apenas dos pareceres históricos de 07/09.
    cobertura e auditorias permanecem restritas até stories próprias.
 7. Escala por partição determinística/lotes/cursor é futura; várias seeds
    independentes não são autorizadas como substituto de unicidade global.
+8. Cada seed v2 tem 1..1024 unidades UTF-16, independentemente; sem truncamento
+   ou normalização. API/callback e thenables seguem o tratamento controlado da
+   seção 6.2 do contrato, sem código de erro novo. Cardinalidade é exata por
+   candidato e resultado; API v1 permanece intacta. Não é limite de arquivo JSON.
 
 ### Definition of Ready
 
@@ -215,7 +220,7 @@ não depende apenas dos pareceres históricos de 07/09.
   permutação, combinatória e classificador; restringir políticas à Lotofácil e
   não criar skill nova.
 - [x] Arquitetura `PASS`, SM `PASS` e PO `GO` revalidados no pacote local
-  `4.12-readiness/2026-09-09-r1`, com evidências e escopo na Story 4.12.
+  `4.12-readiness/2026-09-09-r2`, com evidências e escopo na Story 4.12.
 
 ## Fundação técnica anterior ao Épico 5
 

@@ -4,9 +4,10 @@
 
 **Data:** 2026-09-07
 
-**Revalidação documental:** `4.12-readiness/2026-09-09-r1`, posterior à
-ordenação numérica aprovada; pareceres e revisão examinada registrados na
-Story 4.12, seção “Revalidação — 2026-09-09”. Não altera versões de runtime.
+**Revalidação documental:** `4.12-readiness/2026-09-09-r2`, com cardinalidade,
+seeds e API/callback aprovados por Produto em 09/09; pareceres e revisão
+examinada registrados na Story 4.12, seção “Revalidação r2 — 2026-09-09”.
+Consolida a especificação inicial pré-implementação; não altera runtime v1.
 
 **Decisão F5-IPC-SPEC/4.12:** `IN_PROCESS_TYPESCRIPT_LIMITED`
 
@@ -44,6 +45,7 @@ a fronteira da seção 6.1 pode truncar bytes, sem rollback e sem sucesso.
 | Contrato de geração | **Criar** API v2 assíncrona e aditiva | Não alterar a API v1 nem seus tipos/resultados de 15. |
 | Semântica do `PortfolioGenerator` | **Reutilizar** entrada mínima, resultado transitório e unicidade | A v2 pode ampliar tipos somente por novos exports discriminados. |
 | PRNG, seed e permutação | **Reutilizar** as primitivas da Story 4.2 | Mesma versão e entrada completa devem reproduzir os mesmos ranks. |
+| Entrada e opções v2 | **Restringir** seeds a 1..1024 unidades UTF-16 e callback a retorno síncrono `undefined` | Decisão de Produto de 09/09; preservar schemas e API v1, PRNG e códigos públicos existentes. |
 | Combinatória | **Reutilizar** `C(25,k)` e unranking existentes/generalizados | Não materializar o universo nem armazenar array proporcional a ele. |
 | Classificação estrutural | **Reutilizar** o mecanismo único orientado por política da Story 4.11 | Consumir a política exata do `betSize`; não copiar limites de 15. |
 | Alocação | **Reutilizar** `lotofacil-largest-remainder/1.0.0` | Somente as cinco faixas 0/1/2/3/4+, em `ADVANCED`. |
@@ -85,7 +87,7 @@ lotteryDefinition = {
 }
 
 parameters = {
-  seed: non-empty string,
+  seed: string with 1..1024 UTF-16 code units,
   candidateCount: safe integer
 }
 
@@ -115,6 +117,44 @@ vazias; `lotteryId = "lotofacil"`; `betSize` é inteiro 16–20; e
 semântica v1. `strategy.seed` permanece como proveniência da configuração
 resolvida; os dois campos integram a identidade completa da entrada e não são
 silenciosamente substituídos ou igualados.
+
+Somente na v2 da Story 4.12, cada um dos campos `parameters.seed` e
+`strategy.seed` deve satisfazer `1 <= seed.length <= 1024`, medido em
+unidades de código UTF-16 da string JavaScript já decodificada. Não medir
+bytes UTF-8, pontos de código, grafemas ou o tamanho textual dos escapes JSON.
+Não truncar, normalizar, recodificar nem substituir seeds; preservar os
+papéis distintos dos dois campos e a mistura `charCodeAt` do PRNG existente.
+O teto limita o trabalho síncrono de mistura da seed efetiva a 1.024 unidades
+e a proveniência textual a outras 1.024; é uma escolha operacional do P0,
+não um SLA nem um limite total de arquivo/JSON ou proteção da leitura/parse.
+Os schemas e o comportamento v1 permanecem inalterados.
+
+Excesso em qualquer seed usa `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`
+na etapa 1 da seção 7.1, antes de PRNG, progresso ou resultado; não reutiliza
+o erro específico de contagem. A mesma regra vale na API e no despacho CLI v2.
+Para cada campo, isoladamente e em conjunto, planejar os seguintes vetores
+com o restante do request válido:
+
+| Seed após decodificação | Unidades UTF-16 | Resultado v2 esperado |
+| --- | --- | --- |
+| `""` | 0 | erro de request |
+| `"a"` | 1 | aceita |
+| `"a".repeat(1023)` | 1023 | aceita |
+| `"a".repeat(1024)` | 1024 | aceita |
+| `"a".repeat(1025)` | 1025 | erro de request |
+| `"😀".repeat(511) + "a"` | 1023 | aceita |
+| `"😀".repeat(512)` | 1024 | aceita |
+| `"😀".repeat(512) + "a"` | 1025 | erro de request |
+
+Aceitação significa aprovação desta regra, não dispensa as demais validações.
+A forma JSON literal de 😀 e o escape `\uD83D\uDE00` produzem a mesma string
+e contam duas unidades cada; devem preservar a mesma sequência do PRNG.
+Comparar seeds aceitas com o PRNG reutilizado, sem reimplementá-lo; cobrir
+`"é"` versus `"e\u0301"` como strings distintas, sem exigir ausência de colisões
+do PRNG. Não introduzir rejeição adicional de surrogates isolados.
+Combinar seed excedida com tamanho/modo/contagem inválidos e sinal abortado:
+prevalece o erro de request, independentemente da ordem das propriedades JSON.
+Os mesmos vetores de 1.025 unidades continuam aceitos pelos schemas v1.
 
 - ramo `NEUTRAL`: `mode = "NEUTRAL"`, `statisticalLabel = "NEUTRAL"` e não
   existe `structuralAllocation`;
@@ -180,7 +220,9 @@ dois shapes de `structuralAllocation` e `structuralCounts`:
     structuralAllocationAlgorithmVersion: null | literal,
     candidateOrderingVersion
   },
-  candidates: [{ numbers: [strictly increasing integers in 1..25] }],
+  candidates: [exactly candidateCount unique candidates {
+    numbers: [exactly betSize unique, strictly increasing integers in 1..25]
+  }],
   execution: {
     visitedRanks,
     universeSize,
@@ -204,6 +246,9 @@ contêm, respectivamente, o objeto de percentuais, as quantidades produzidas por
 faixa e o literal da seção 3.1. O array possui exatamente `candidateCount`
 candidatos únicos, `selectedCount = candidateCount` e
 `visitedRanks <= universeSize = C(25, betSize)`.
+Para cada candidato, `numbers.length === betSize`; o resultado satisfaz
+`candidates.length === candidateCount`, sem candidatos duplicados. Esses
+invariantes são verificados conjuntamente com o request antes da publicação.
 
 A ordem v2 é a comparação lexicográfica numérica das dezenas canônicas,
 elemento a elemento. Ela não reutiliza nem modifica
@@ -225,7 +270,8 @@ As ordenações e os resultados das Stories 4.9 e 4.10 permanecem preservados.
 1. Fazer preflight completo do schema, definição, modo, contagem, universo e
    referência da política, sem emitir progresso. Em `ADVANCED`, converter a
    alocação em quantidades e compará-las às contagens exatas das faixas da massa
-   referenciada; inviabilidade conhecida falha ainda no preflight.
+   referenciada; inviabilidade conhecida falha ainda no preflight. Depois,
+   validar opções e verificar o sinal conforme 6.2, ainda sem progresso ou PRNG.
 2. Derivar, com `createDeterministicRandom(parameters.seed)`, `offset` e passo
    coprimo para uma permutação completa dos ranks `0..C(25,k)-1`, conforme a
    fórmula normativa abaixo.
@@ -295,14 +341,14 @@ Para todo `betSize` 16–20:
 
 | `betSize` | `C(25,k)` | máximo P0 por execução |
 | ---: | ---: | ---: |
-| 16 | 2.042.975 | 10.000 |
-| 17 | 1.081.575 | 10.000 |
-| 18 | 480.700 | 10.000 |
-| 19 | 177.100 | 10.000 |
-| 20 | 53.130 | 10.000 |
+| 16 | 2.042.975 | 10000 |
+| 17 | 1.081.575 | 10000 |
+| 18 | 480.700 | 10000 |
+| 19 | 177.100 | 10000 |
+| 20 | 53.130 | 10000 |
 
-`10.000` é somente teto técnico por execução. Não é padrão, recomendação de
-compra, limite comercial ou limite definitivo. `10.001` e qualquer contagem
+`10000` é somente teto técnico por execução. Não é padrão, recomendação de
+compra, limite comercial ou limite definitivo. `10001` e qualquer contagem
 acima do universo são rejeitadas no preflight, antes do primeiro progresso.
 Elevar o teto exige benchmark atualizado, revisão arquitetural e nova versão do
 contrato/algoritmo afetado.
@@ -314,7 +360,8 @@ Não há timeout normativo no contrato `1.0.0`; todo resultado registra
 ## 6. Progresso, cancelamento e CLI
 
 A API v2 é assíncrona e aceita `AbortSignal` e callback de progresso. Após o
-preflight bem-sucedido, emite um evento inicial, eventos após cada lote de no
+preflight, a validação das opções e a verificação inicial do sinal (6.2),
+emite um evento inicial, eventos após cada lote de no
 máximo 1.024 ranks e um evento `FINALIZE_RESULT` não terminal depois de
 completar a seleção. Não existe evento de sucesso antes da validação conjunta;
 na CLI, sucesso exige concluir a escrita do JSON final validado, conforme 6.1.
@@ -389,30 +436,155 @@ do processo após o início pode truncar bytes, sem rollback. Não converter
 essa falha em cancelamento nem tratá-la como resultado válido. Não criar
 protocolo, retry ou erro de IPC para esse caso.
 
+### 6.2 Superfície TypeScript v2 e falhas de callback
+
+Exportar os tipos de request, resultado e progresso em
+`@boloes/lottery-contracts`, correspondendo integralmente às seções 3.2,
+3.4 e 6, e a função aditiva em `@boloes/lottery-lotofacil`:
+
+```typescript
+export type PortfolioGenerationV2ErrorCode =
+  | "INVALID_PORTFOLIO_GENERATION_V2_REQUEST"
+  | "UNSUPPORTED_LOTOFACIL_BET_SIZE"
+  | "UNSUPPORTED_LOTOFACIL_GENERATION_MODE"
+  | "LOTOFACIL_STRUCTURAL_POLICY_MISMATCH"
+  | "LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED"
+  | "LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE"
+  | "LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED"
+  | "INVALID_PORTFOLIO_GENERATION_V2_RESULT";
+
+export interface PortfolioGenerationV2Failure {
+  readonly type: "error";
+  readonly contractVersion: "lotofacil-16-20-generation/1.0.0";
+  readonly code: PortfolioGenerationV2ErrorCode;
+  readonly message: string;
+}
+
+export interface PortfolioGenerationV2Options {
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (
+    progress: Readonly<PortfolioGenerationV2Progress>,
+  ) => undefined;
+}
+
+export declare function generateLotofacilPortfolioV2(
+  request: PortfolioGenerationV2Request,
+  options?: PortfolioGenerationV2Options,
+): Promise<PortfolioGenerationV2Result>;
+```
+
+Os tipos de request/resultado/progresso são os shapes normativos referidos
+acima, não objetos abertos nem substitutos da validação runtime. Opções
+omitidas equivalem a `{}`; ausência de sinal significa ausência de
+cancelamento externo, e ausência de callback não altera seleção ou resultado.
+Todas as falhas da operação rejeitam a Promise com o envelope estrito
+`PortfolioGenerationV2Failure` da seção 7, sem exceção bruta ou resultado
+parcial; TypeScript não codifica o tipo de rejeição no parâmetro de `Promise`.
+A CLI apenas serializa esse envelope em stderr e aplica os exits existentes.
+
+Ordem: executar o preflight completo do request na ordem da seção 7.1;
+validar as opções; verificar o sinal; somente depois inicializar PRNG e
+emitir o primeiro progresso. Request inválido prevalece sobre sinal
+previamente abortado, inclusive nos erros específicos de domínio. Opções
+fora do contrato (objeto inválido, sinal incompatível ou callback não função)
+usam `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`, após as validações do request.
+Request/opções válidos com sinal já abortado rejeitam com
+`LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`, sem PRNG, progresso ou resultado.
+
+O callback é exclusivamente síncrono no P0: deve retornar `undefined`;
+o retorno normal não transmite dados nem comandos ao gerador. Usar
+`() => undefined`, não `() => void`, para não aceitar estaticamente funções
+`async`. Um callback de coleta deve usar bloco sem valor de retorno,
+por exemplo `event => { events.push(event); }`.
+Verificar cancelamento antes de cada emissão e depois de cada callback.
+Não invocar callback depois da última verificação anterior à disponibilização
+do resultado/publicação da seção 6.1.
+
+Exceção lançada pelo callback, em qualquer fase, ou retorno diferente de
+`undefined` rejeita com `INVALID_PORTFOLIO_GENERATION_V2_RESULT`: falha de
+execução que impede disponibilizar resultado válido, sem novo código.
+Parar emissões e trabalho; não expor o valor lançado. Se o callback abortar
+e também lançar/retornar valor inválido na mesma chamada, prevalece essa
+falha de callback; se retornar normalmente, a verificação subsequente
+observa o cancelamento. Eventos já emitidos não são desfeitos.
+
+Callbacks assíncronos não são admitidos. Se JavaScript/`any` contornar o tipo
+e devolver Promise/thenable, tratar como retorno inválido sem aguardar sua
+conclusão; anexar observador que absorva eventual rejeição, evitando rejeição
+não observada. Isso não habilita callbacks assíncronos, não aguarda promessas
+pendentes e não altera a falha pública já escolhida. A inspeção do retorno,
+inclusive acesso a `then` por getter/proxy, sua assimilação e a instalação do
+observador permanecem dentro do tratamento controlado: `then` não chamável
+ou que lança, getter/proxy que lança e falhas ao observar a rejeição mantêm
+`INVALID_PORTFOLIO_GENERATION_V2_RESULT`, sem exceção bruta nem rejeição não
+observada. Não usar diretamente `.then`/`.catch` do valor sem essa proteção.
+O callback deve ser curto: não existe preempção ou timeout para código síncrono
+do chamador. A API/CLI
+não publica em falha de callback; o chamador não deve escrever em stdout por
+conta própria. A fronteira e as limitações de transporte da seção 6.1 não mudam.
+
+Vetores planejados, usando sincronização/contadores, sem sleeps:
+
+- request inválido + sinal abortado: erro correspondente à primeira etapa
+  inválida de 7.1; opções inválidas não substituem erro do request;
+- request válido + opções inválidas (`null`, array, callback não função ou
+  sinal incompatível), inclusive com sinal abortado quando presente:
+  `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`, zero progresso/PRNG/resultado;
+- request/opções válidos + sinal abortado: cancelamento, zero chamadas ao
+  PRNG/callback, nenhuma resolução com resultado; CLI exit 130 e stdout vazio;
+- opções omitidas, somente sinal, somente callback e ambos: resultado válido
+  idêntico para a mesma entrada quando não houver cancelamento/falha;
+- callback síncrono com retorno `undefined`: eventos na ordem da seção 6;
+  callback aborta e retorna normalmente: cancelamento, sem evento posterior;
+- callback lança no evento inicial, em lote ou em `FINALIZE_RESULT`:
+  erro de resultado, sem evento posterior nem publicação; mesmo código se
+  abortar e lançar na mesma chamada;
+- retorno numérico, Promise resolvida, rejeitada, pendente e thenable:
+  erro de resultado, sem espera pela conclusão, sem rejeição não observada;
+  teste de tipos rejeita callback `async`;
+- thenables malformados: getter/proxy de `then` que lança, `then` não função,
+  `then` que lança antes/depois de resolver ou rejeitar, e observação que falha:
+  erro de resultado controlado, sem exceção bruta, publicação ou
+  `unhandledRejection`; sincronizar a verificação de rejeições sem sleeps;
+- falhas anteriores à publicação: API rejeitada, CLI exit 1 e stdout vazio;
+  preservar separadamente os testes de falha de escrita posterior da seção 6.1.
+
 ## 7. Erros públicos
 
-O único envelope de erro v2 é estrito, escrito como uma linha JSONL em stderr:
+A representação pública de erro v2 é o objeto estrito abaixo: a API rejeita
+com esse objeto; somente a CLI o serializa como uma linha JSONL em stderr.
+A API não escreve em stdout/stderr.
 
 ```text
 {
   type: "error",
   contractVersion: "lotofacil-16-20-generation/1.0.0",
   code: one of the literals below,
-  message: stable non-empty string for that code
+  message: exact canonical literal paired with code in the table below
 }
 ```
 
-Não há `stack`, path local ou campo adicional no envelope público. Os códigos
-são:
+Não há `stack`, path local ou campo adicional no envelope público. A tabela
+normativa abaixo, aprovada por Produto em 2026-09-09 no adendo da revisão r2,
+é a única fonte dos oito pares `code`/`message`; preservar exatamente
+maiúsculas, espaços e pontuação, sem tradução, interpolação ou sufixos.
 
-- `INVALID_PORTFOLIO_GENERATION_V2_REQUEST`;
-- `UNSUPPORTED_LOTOFACIL_BET_SIZE`;
-- `UNSUPPORTED_LOTOFACIL_GENERATION_MODE`;
-- `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH`;
-- `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED`;
-- `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE`;
-- `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`;
-- `INVALID_PORTFOLIO_GENERATION_V2_RESULT`.
+| `code` | `message` canônica |
+| --- | --- |
+| `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` | `Invalid portfolio generation v2 request.` |
+| `UNSUPPORTED_LOTOFACIL_BET_SIZE` | `Unsupported Lotofacil bet size.` |
+| `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` | `Unsupported Lotofacil generation mode.` |
+| `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` | `Lotofacil structural policy mismatch.` |
+| `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` | `Lotofacil candidate count limit exceeded.` |
+| `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE` | `Lotofacil structural allocation infeasible.` |
+| `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED` | `Lotofacil portfolio generation cancelled.` |
+| `INVALID_PORTFOLIO_GENERATION_V2_RESULT` | `Invalid portfolio generation v2 result.` |
+
+Todo controle de fluxo depende exclusivamente de `code`, nunca de `message`.
+Mensagens não incorporam seed, input, stack, caminhos ou a exceção original.
+Falhas internas, de callback e de tratamento de thenables mantêm o par genérico
+de `INVALID_PORTFOLIO_GENERATION_V2_RESULT`, conforme 6.2 e 7.1. A tabela não
+altera envelope, precedência, exits ou o tratamento separado das falhas da CLI.
 
 ### 7.1 Precedência do preflight v2
 
@@ -420,17 +592,17 @@ Retornar somente o erro da primeira etapa inválida, nesta ordem fixa:
 
 A validação estrutural verifica campos ausentes/desconhecidos, tipos e shapes.
 Também pertencem ao erro de request suas regras de boa formação: literais
-fixos do envelope/definição, seeds não vazias, formato de hashes, percentuais
-válidos e contagem inteira segura positiva. A validação semântica subsequente
+fixos do envelope/definição, seeds com 1..1024 unidades UTF-16, formato de
+hashes, percentuais válidos e contagem inteira segura positiva. A validação semântica subsequente
 verifica os domínios de tamanho/modo, o teto, a referência da política e a
 viabilidade da alocação, cada qual com seu código específico.
 
 | Ordem | Validação | Código público |
 | --- | --- | --- |
-| 1 | Estrutura/schema: campos ausentes/desconhecidos, tipos, literais fixos, seeds vazias, formato dos hashes e shape do ramo reconhecido; contagem não inteira segura positiva; alocação com chaves/percentuais/soma inválidos | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| 1 | Estrutura/schema: campos ausentes/desconhecidos, tipos, literais fixos, seeds vazias ou acima de 1024 unidades UTF-16, formato dos hashes e shape do ramo reconhecido; contagem não inteira segura positiva; alocação com chaves/percentuais/soma inválidos | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
 | 2 | `strategy.betSize` inteiro fora de 16–20 | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
 | 3 | `strategy.mode` string fora de `NEUTRAL`/`ADVANCED` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
-| 4 | Contagem positiva acima de `min(10.000, C(25, betSize))` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
+| 4 | Contagem positiva acima de `min(10000, C(25, betSize))` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
 | 5 | Identidade/versões/hashes de política divergentes do artefato ou `policy.betSize` diferente de `strategy.betSize` | `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` |
 | 6 | Quantidades por maiores restos excedem as massas disponíveis | `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE` |
 
@@ -446,8 +618,10 @@ política validada pertence à etapa 5. Uma alocação malformada pertence à et
 1; alocação válida, mas matematicamente inviável, pertence à etapa 6.
 Essa separação não relaxa o schema público: o request só é aceito após todas
 as etapas. Não depender da ordem de propriedades do JSON nem da ordem de
-issues produzidas pelo validador. Todos esses erros têm exit `1`, sem progresso
-ou stdout. Falhas da CLI anteriores ao despacho mantêm a fronteira já descrita.
+issues produzidas pelo validador. Na API, esses erros rejeitam a Promise sem
+progresso; na CLI, têm exit `1` e stdout vazio. Falhas da CLI anteriores ao
+despacho mantêm a fronteira já descrita. Opções e sinal são avaliados somente
+após esse preflight completo, conforme 6.2.
 
 O mapeamento distingue a origem da falha:
 
@@ -461,18 +635,20 @@ O mapeamento distingue a origem da falha:
   resultado válido, sem corresponder a erro de domínio/validação ou
   cancelamento, usa `INVALID_PORTFOLIO_GENERATION_V2_RESULT`; o código expressa
   a impossibilidade de publicar resultado válido, sem expor a exceção interna;
+  inclui falha de callback/retorno e de tratamento de thenables conforme 6.2;
 - cancelamento cooperativo por `AbortSignal`, inclusive acionado por `SIGINT`,
   observado antes da fronteira da seção 6.1 usa
   `LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED`.
 
-Esses casos usam somente o envelope e os exits desta seção. Falhas e
+Esses casos usam somente a representação aprovada; os exits e a serialização
+pertencem exclusivamente à CLI. Falhas e
 cancelamentos anteriores à fronteira de publicação da seção 6.1 deixam stdout
 vazio, sem resultado parcial. Falha de escrita posterior pode deixar bytes
 truncados, sem rollback: deve ser reportada como falha, nunca como sucesso
 ou cancelamento, conforme 6.1.
 
 Entrada inválida nunca provoca progresso. Falha de execução ou validação e
-cancelamento nunca publicam candidato parcial. Sucesso usa exit `0`; qualquer
+cancelamento nunca publicam candidato parcial. Na CLI, sucesso usa exit `0`; qualquer
 erro não relacionado a cancelamento usa exit `1`; cancelamento observado antes
 da fronteira da seção 6.1, inclusive por SIGINT, usa exit `130`. As mensagens são determinísticas por código e nunca
 controlam fluxo.
@@ -506,10 +682,16 @@ de cálculo v2. Falha de protocolo, crash de worker e timeout de IPC pertencem
   vetores de regressão.
 - Nova política ou massa é consumida somente sob nova identidade/versão/hash da
   Story 4.11; um artefato antigo nunca é reinterpretado silenciosamente.
-- Alterar o teto exige benchmark e revisão arquitetural; se mudar o conjunto de
+- Alterar o teto de candidatos exige benchmark e revisão arquitetural; se mudar o conjunto de
   requests válidos, avança a versão do contrato.
 - Nenhuma versão v2 pode alterar os bytes/resultados cobertos pelos vetores v1
   de 15.
+
+A aprovação de Produto de 09/09 incorpora o teto de seeds e a superfície
+API/callback à especificação inicial v2 ainda não implementada/liberada.
+Não reinterpreta um runtime v2 já publicado. Após sua liberação, mudar o
+conjunto de seeds aceitas ou a semântica pública de opções/rejeições exige
+versionamento compatível com as regras acima, nunca mudança silenciosa.
 
 ## 9. Evolução futura de escala — fora da Story 4.12
 
@@ -528,8 +710,8 @@ PRNG, métricas e políticas, observaram:
 
 | Cenário | Evidência observada |
 | --- | --- |
-| v1, 15, `NEUTRAL`, 10.000 candidatos | aproximadamente 50 ms; RSS aproximado 117 MB |
-| harness 16–20, classificado/ordenado, 10.000 candidatos | aproximadamente 104–116 ms; RSS 118–121 MB; JSON 530–656 KB |
+| v1, 15, `NEUTRAL`, 10000 candidatos | aproximadamente 50 ms; RSS aproximado 117 MB |
+| harness 16–20, classificado/ordenado, 10000 candidatos | aproximadamente 104–116 ms; RSS 118–121 MB; JSON 530–656 KB |
 | varredura integral classificada, pior universo (`betSize=16`) | aproximadamente 5,40 s no caminho representativo; harness conservador aproximadamente 10,4 s |
 | lote cooperativo de 1.024 ranks | até aproximadamente 5,21 ms observado |
 | 100 candidatos raros `FOUR_PLUS_EXTREMES` | 27.014–68.109 visitas; aproximadamente 129–378 ms |
@@ -545,13 +727,25 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
    política/versão/hash incompatíveis, alocação maior que a massa disponível e
    resultado conjunto inválido.
    Verificar os vetores de violações simultâneas da seção 11.1, incluindo a
-   alcançabilidade dos erros específicos de tamanho e modo.
-2. Bordas: aceitar `candidateCount` 1 e 10.000; rejeitar 10.001 e, para cada
-   tamanho 16–20, rejeitar `candidateCount = C(25,k)` porque todos esses
-   universos excedem o teto técnico de 10.000. Toda rejeição ocorre no
-   preflight, sem progresso.
-3. Propriedades 16–20: tamanho, domínio 01–25, ordem interna, unicidade,
-   cardinalidade e determinismo por repetição.
+   alcançabilidade dos erros específicos de tamanho e modo; incluir os vetores
+   de seeds da seção 3.2 e de opções/preaborto/callback/thenables da seção 6.2.
+2. Bordas: `candidateCount` 1 e 10000 satisfazem a regra de contagem;
+   sucesso exige request integralmente válido. Testes positivos usam `NEUTRAL`
+   ou `ADVANCED` comprovadamente viável. Com as demais regras satisfeitas,
+   `ADVANCED` inviável continua retornando o erro de alocação. Rejeitar 10001
+   pelo erro de limite antes de avaliar a viabilidade, conforme seção 7.1.
+   Para cada tamanho 16–20, `candidateCount = C(25,k)` é igual ao universo,
+   mas excede o teto técnico de 10000 e recebe o mesmo erro de limite.
+   Essas rejeições ocorrem no preflight, sem progresso; vetores em 11.1.
+3. Propriedades, para cada `betSize` de 16 a 20: cada candidato satisfaz
+   `numbers.length === betSize`, com dezenas inteiras, únicas, crescentes em
+   1..25; `candidates.length === candidateCount`, com candidatos únicos, e
+   determinismo por repetição. Na validação conjunta, aceitar resultados que
+   satisfaçam todos os invariantes; rejeitar com
+   `INVALID_PORTFOLIO_GENERATION_V2_RESULT` candidatos com `betSize - 1` ou
+   `betSize + 1` dezenas, dezenas fracionárias/repetidas/fora de ordem/fora do
+   domínio, total `candidateCount - 1` ou `candidateCount + 1` e candidatos
+   duplicados mesmo quando o total estiver correto; sem publicação.
 4. `NEUTRAL`: ausência de alocação e de qualquer filtro estrutural.
 5. `ADVANCED`: cinco faixas exatas, maiores restos, desempate estável,
    quantidades produzidas e alocação inviável sem parcial; tolerância e
@@ -578,6 +772,11 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
 8. `timeoutApplied: false` e ausência de temporizador normativo.
 9. CLI: stdout com um JSON final; progresso/diagnóstico JSONL somente em
    stderr; exits e erros públicos determinísticos.
+   Testar os oito pares exatos da tabela normativa da seção 7 na rejeição da
+   API e na serialização CLI, incluindo os vetores de 3.2, 6.2, 11.1 e 11.2.
+   Variar seed/input e exceções internas/callback para comprovar que não
+   alteram a mensagem; rejeitar pares código/mensagem divergentes. Verificar
+   fluxo baseado somente em `code`, sem repetir os literais neste plano.
 10. Regressão integral do universo de comportamento v1 de 15, incluindo os
     vetores canônicos já registrados: neutro
     `cbb8c1e1904355f07f2ccc5e3d1e9fe430c883fa6738001810705d1ab4c67d74`
@@ -619,6 +818,9 @@ fixture 4.11. Cada linha altera somente os campos indicados. `policyId =
 | `strategy.betSize = 15`; `strategy.mode = "UNSUPPORTED"` | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
 | `strategy.mode = "UNSUPPORTED"`; `candidateCount = 10001` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
 | `candidateCount = 10001`; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
+| `candidateCount = 10000`; alocação 100% em `fourPlusExtremes` e 0 nas demais | `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE` |
+| `candidateCount = 10001`; alocação 100% em `fourPlusExtremes` e 0 nas demais | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
+| `candidateCount = C(25,16)`; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
 | `candidateCount = 3173`; alocação 100% em `fourPlusExtremes` e 0 nas demais; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` |
 | Remover `structuralAllocation.zeroExtremes`; `candidateCount = 10001` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
 | `candidateCount = 0`, `-1` ou `1.5` (casos separados); `strategy.mode = "UNSUPPORTED"` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
@@ -626,11 +828,12 @@ fixture 4.11. Cada linha altera somente os campos indicados. `policyId =
 `candidateCount` e `structuralAllocation` na tabela abreviam, respectivamente,
 `parameters.candidateCount` e `strategy.structuralAllocation`. A massa normativa
 de `FOUR_PLUS_EXTREMES` para 16 é 3.172: restaurando somente o `policyId`
-normativo no quinto vetor, o erro esperado passa a
+normativo no vetor com `candidateCount = 3173`, o erro esperado passa a
 `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE`. Os vetores isolados de tamanho
 15 e modo `"UNSUPPORTED"` também devem retornar seus códigos específicos.
 Permutar a ordem das propriedades JSON em todos os níveis deve preservar
-código, mensagem fixa, exit `1` e ausência de progresso/stdout em cada caso.
+código, mensagem canônica correspondente da seção 7, exit `1` e ausência de
+progresso/stdout em cada caso.
 
 ### 11.2 Evidência e vetores de fronteira da alocação
 
@@ -669,8 +872,8 @@ as cotas seguem `p_i * candidateCount / 100`, sem renormalização.
 - F5-IPC-SPEC/4.12 com decisão `IN_PROCESS_TYPESCRIPT_LIMITED`: satisfeita por
   este contrato; não depende de `F5-IPC-DONE` para implementar a Story 4.12.
 - Validação Arquitetura `PASS`, SM `PASS` e PO `GO`: obrigatórias antes de
-  `Ready`; reexecutadas para o pacote local r1 identificado acima, não apenas
-  herdadas do gate histórico de 07/09.
+  `Ready`; reexecutadas para o pacote local r2 identificado acima, não apenas
+  herdadas dos gates históricos de 07/09 ou r1.
 - Implementação exige gate QA, lint, typecheck, suíte completa, testes focados,
   regressões e CodeRabbit; este documento não os antecipa.
 - Nenhuma dependência de runtime nova, manifest ou lockfile é prevista.

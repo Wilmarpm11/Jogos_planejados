@@ -133,7 +133,8 @@ O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
 
 - execução TypeScript limitada no mesmo processo, sem Python/IPC;
 - API v2 assíncrona e aditiva, com v1 de 15 imutável;
-- `NEUTRAL` sem `structuralAllocation` ou `structuralCounts`; `ADVANCED`
+- `NEUTRAL` sem alocação no request e com `structuralAllocation` e
+  `structuralCounts` nulos no resultado; `ADVANCED`
   somente por alocação explícita das cinco faixas;
 - teto técnico de 10.000, também limitado por `C(25, betSize)`;
 - progresso estruturado, cooperação no máximo a cada 1.024 ranks e
@@ -147,8 +148,10 @@ O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
 Essa disposição tornou a Story 4.12 `Ready` após `PASS` de Arquitetura,
 validação SM e `GO` do PO em 2026-09-07. O Épico 4 continua aberto até a
 implementação e o fechamento formal da story.
-O gate atual foi revalidado sobre `4.12-readiness/2026-09-09-r1`, incluindo
-a ordenação numérica aprovada em 09/09 e os cinco achados documentais do PR #13;
+O gate atual foi revalidado sobre `4.12-readiness/2026-09-09-r2`, incluindo
+cardinalidade, seeds individuais de 1..1024 unidades UTF-16 e API/callback
+aprovados, com thenables malformados controlados, além da ordenação numérica.
+Essas restrições são somente v2 e não limitam o tamanho do arquivo JSON;
 pareceres e revisão local examinada constam na Story 4.12. Isso não conclui
 o IPC geral nem `F5-IPC-DONE`.
 

@@ -1,4 +1,4 @@
-# PRD v0.4.16 - Plataforma de Engenharia de Bolões
+# PRD v0.4.17 - Plataforma de Engenharia de Bolões
 
 **Status:** Aprovado condicionalmente para fundação e arquitetura  
 **MVP:** Lotofácil  
@@ -27,6 +27,7 @@
 | 2026-09-07 | 0.4.14 | Gate de políticas e massas 16–20 concluído pela Story 4.11, com QA, revisão remota, fixtures e hashes preservados | QA / PO / SM |
 | 2026-09-07 | 0.4.15 | F5-IPC-SPEC/4.12 fechado: geração 16–20 em TypeScript limitado, API v2, modos P0, teto, observabilidade e compatibilidade aprovados; IPC geral permanece pendente para o Épico 5 | Produto / PO / Arquitetura / SM |
 | 2026-09-09 | 0.4.16 | Precisões documentais de alocação, publicação e evento não terminal; readiness 4.12 revalidado no pacote local r1, incluindo a ordenação numérica já aprovada | Arquitetura / SM / PO |
+| 2026-09-09 | 0.4.17 | Produto aprova seeds UTF-16 e superfície API/callback, incluindo thenables malformados; cardinalidade explicitada e readiness 4.12 revalidado no pacote r2, sem alterar v1 ou implementar código | Produto / Arquitetura / SM / PO |
 
 ## 1. Objetivo e contexto
 
@@ -183,6 +184,9 @@ Na geração P0 de apostas-fonte Lotofácil 16–20, a fronteira aprovada é
 0/1/2/3/4+ e usa `lotofacil-largest-remainder/1.0.0`: para a soma calculada `S`,
 tolerância absoluta inclusiva `Math.abs(S - 100) <= 1e-9`, sem normalizar os
 percentuais recebidos. As contagens inteiras devem reconciliar exatamente.
+Cada candidato contém exatamente `betSize` dezenas (`numbers.length === betSize`),
+inteiras, únicas, crescentes e pertencentes a 1..25; o resultado contém
+exatamente `candidateCount` candidatos únicos (`candidates.length === candidateCount`).
 Núcleo, sinais auxiliares e regras E individuais
 não são filtros, e não há estratégia experimental 16–20. A API, o comparador e
 os resultados v1 de 15 permanecem inalterados. Python/IPC continua fora desta
@@ -197,6 +201,19 @@ política → viabilidade da alocação. Os domínios de tamanho/modo são avali
 após a estrutura, preservando seus erros específicos; contagem não positiva
 ou não inteira é erro de request, excesso do teto é erro de limite. A ordem
 das propriedades JSON não altera o erro, conforme o contrato da Story 4.12.
+Somente na v2, cada seed (`parameters.seed` e `strategy.seed`) contém de 1 a
+1024 unidades UTF-16, sem truncamento ou normalização; excesso é erro de
+request no preflight. Esse teto não limita a leitura/parse do arquivo JSON.
+A API oferece opções opcionais de sinal e callback síncrono de progresso,
+com retorno `undefined`: request inválido precede sinal previamente abortado;
+request/opções válidos com sinal abortado não produzem progresso ou resultado.
+Falha de callback usa o erro existente de execução/resultado, sem publicação;
+Promises/thenables não são callbacks admitidos nem aguardados; inspeção e
+tratamento, inclusive de thenables malformados, não deixam escapar exceção
+bruta ou rejeição não observada, conforme seção 6.2 do contrato. Opções
+inválidas são erro de request sem progresso. A API rejeita com o objeto
+estruturado aprovado; somente a CLI serializa o envelope em stderr.
+Os schemas, seeds e comportamentos v1 não mudam.
 
 Na primeira entrega da distribuição estrutural de carteira, somente candidatos
 canônicos da Lotofácil simples de 15 dezenas são aplicáveis. O auditor reutiliza
@@ -349,7 +366,7 @@ CAIXA, isolado do Core matemático e do renderizador A4.
   não padrão, recomendação de compra, limite comercial ou limite definitivo;
   10.001 é rejeitado antes do progresso. A API assíncrona verifica cancelamento
   e cede o event loop no máximo a cada 1.024 ranks, emite progresso estruturado
-  em JSONL somente no stderr. `FINALIZE_RESULT` é não terminal, emitido no
+  via callback na API e em JSONL somente no stderr da CLI. `FINALIZE_RESULT` é não terminal, emitido no
   máximo uma vez e somente após seleção completa; erro/cancelamento antes
   dessa etapa permite zero emissões. Após finalização e serialização, há yield real
   ao event loop e nova verificação de cancelamento antes da primeira chamada
@@ -698,8 +715,8 @@ estratégias -> geração/auditoria -> congelamento -> impressão -> conferênci
   `docs/architecture/lotofacil-16-20-generation-contract.md` fixa API v2,
   modos, teto, progresso, cancelamento, compatibilidade e isolamento. Essa
   decisão não conclui o contrato IPC geral nem `F5-IPC-DONE` do Épico 5.
-  A revalidação local `4.12-readiness/2026-09-09-r1`, incluindo a ordenação
-  numérica aprovada em 09/09, tem Arquitetura `PASS`, SM `PASS` e PO `GO`
+  A revalidação local `4.12-readiness/2026-09-09-r2`, incluindo cardinalidade,
+  seeds/API/callback aprovados e a ordenação numérica, tem Arquitetura `PASS`, SM `PASS` e PO `GO`
   registrados com a revisão examinada na Story 4.12; não autoriza código.
 - [x] Definir algoritmo, limite de tempo e erro aceitável para cobertura única.
   Método exato por índice combinatório e mapa denso, teto de 1.000 apostas
