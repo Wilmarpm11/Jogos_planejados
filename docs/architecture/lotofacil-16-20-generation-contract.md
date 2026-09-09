@@ -440,25 +440,28 @@ protocolo, retry ou erro de IPC para esse caso.
 
 Exportar os tipos de request, resultado e progresso em
 `@boloes/lottery-contracts`, correspondendo integralmente às seções 3.2,
-3.4 e 6, e a função aditiva em `@boloes/lottery-lotofacil`:
+3.4 e 6, e a função aditiva em `@boloes/lottery-lotofacil`.
+No trecho normativo abaixo, `portfolioGenerationV2CanonicalMessages` designa
+o mapa literal planejado dos oito pares da tabela da seção 7: exatamente
+essas chaves e valores, preservados como literais readonly (`as const`),
+nunca ampliados para `Record<string, string>`. Sua materialização pertence
+à implementação futura; a tabela permanece a referência documental única.
 
 ```typescript
-export type PortfolioGenerationV2ErrorCode =
-  | "INVALID_PORTFOLIO_GENERATION_V2_REQUEST"
-  | "UNSUPPORTED_LOTOFACIL_BET_SIZE"
-  | "UNSUPPORTED_LOTOFACIL_GENERATION_MODE"
-  | "LOTOFACIL_STRUCTURAL_POLICY_MISMATCH"
-  | "LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED"
-  | "LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE"
-  | "LOTOFACIL_PORTFOLIO_GENERATION_CANCELLED"
-  | "INVALID_PORTFOLIO_GENERATION_V2_RESULT";
+type PortfolioGenerationV2CanonicalMessages =
+  typeof portfolioGenerationV2CanonicalMessages;
 
-export interface PortfolioGenerationV2Failure {
-  readonly type: "error";
-  readonly contractVersion: "lotofacil-16-20-generation/1.0.0";
-  readonly code: PortfolioGenerationV2ErrorCode;
-  readonly message: string;
-}
+export type PortfolioGenerationV2ErrorCode =
+  keyof PortfolioGenerationV2CanonicalMessages;
+
+export type PortfolioGenerationV2Failure = {
+  [Code in PortfolioGenerationV2ErrorCode]: {
+    readonly type: "error";
+    readonly contractVersion: "lotofacil-16-20-generation/1.0.0";
+    readonly code: Code;
+    readonly message: PortfolioGenerationV2CanonicalMessages[Code];
+  };
+}[PortfolioGenerationV2ErrorCode];
 
 export interface PortfolioGenerationV2Options {
   readonly signal?: AbortSignal;
@@ -481,6 +484,17 @@ Todas as falhas da operação rejeitam a Promise com o envelope estrito
 `PortfolioGenerationV2Failure` da seção 7, sem exceção bruta ou resultado
 parcial; TypeScript não codifica o tipo de rejeição no parâmetro de `Promise`.
 A CLI apenas serializa esse envelope em stderr e aplica os exits existentes.
+A união discriminada por `code` vincula cada ramo à sua mensagem literal;
+não aceita o produto cartesiano entre os oito códigos e as oito mensagens.
+O schema runtime planejado deve ser uma união estrita dos mesmos oito ramos,
+derivada do mesmo mapa, com `type` e `contractVersion` literais como acima.
+Ambos rejeitam pares trocados e mensagens arbitrárias. Tipagem não substitui
+validação runtime, inclusive para valores construídos ou recebidos via `any`.
+Planejar construção centralizada a partir de `code` e do mapa canônico e
+validar o envelope antes da rejeição pública da API e da serialização CLI;
+não aceitar nem repassar `Error.message` arbitrário. Falha interna nessa
+construção/validação mantém o par genérico de resultado previsto em 7.1,
+sem novo código, publicação de resultado ou mudança de precedência/exits.
 
 Ordem: executar o preflight completo do request na ordem da seção 7.1;
 validar as opções; verificar o sinal; somente depois inicializar PRNG e
@@ -775,7 +789,12 @@ QA da implementação, separando geração produtiva de qualquer oráculo/teste.
    Testar os oito pares exatos da tabela normativa da seção 7 na rejeição da
    API e na serialização CLI, incluindo os vetores de 3.2, 6.2, 11.1 e 11.2.
    Variar seed/input e exceções internas/callback para comprovar que não
-   alteram a mensagem; rejeitar pares código/mensagem divergentes. Verificar
+   alteram a mensagem. Em testes de tipos e do schema runtime planejado,
+   aceitar os oito pares canônicos e rejeitar todos os pares trocados
+   (cada código com mensagem de outro código) e mensagens arbitrárias;
+   preservar os literais `type`/`contractVersion` e a estriteza do envelope.
+   Verificar o mesmo mapeamento antes da rejeição API/serialização CLI.
+   Verificar
    fluxo baseado somente em `code`, sem repetir os literais neste plano.
 10. Regressão integral do universo de comportamento v1 de 15, incluindo os
     vetores canônicos já registrados: neutro
