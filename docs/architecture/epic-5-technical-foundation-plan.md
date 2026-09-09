@@ -139,7 +139,9 @@ O contrato `docs/architecture/lotofacil-16-20-generation-contract.md` registra:
 - teto técnico de 10.000, também limitado por `C(25, betSize)`;
 - progresso estruturado, cooperação no máximo a cada 1.024 ranks e
   `timeoutApplied: false`; falha/cancelamento antes da primeira escrita do JSON
-  final deixa stdout vazio, com SIGINT/130; após essa fronteira, SIGINT tardio
+  final deixa stdout vazio. Sucesso usa exit 0; cancelamento observado antes
+  dessa fronteira, inclusive SIGINT, usa exit 130; demais falhas usam exit 1.
+  Após essa fronteira, SIGINT tardio
   não reclassifica e falha de escrita pode truncar bytes, sem rollback nem sucesso;
 - reutilização do PRNG, permutação, combinatória e classificador 4.11;
 - expansão de escala por partição determinística futura, nunca por várias

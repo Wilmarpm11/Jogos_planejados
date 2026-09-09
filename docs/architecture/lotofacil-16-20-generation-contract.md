@@ -88,7 +88,7 @@ lotteryDefinition = {
 
 parameters = {
   seed: string with 1..1024 UTF-16 code units,
-  candidateCount: safe integer
+  candidateCount: safe integer 1..min(10000, C(25, betSize))
 }
 
 policySetReference = {
@@ -112,6 +112,11 @@ Os campos comuns de `strategy` são exatamente `id`, `version`, `lotteryId`,
 `requiresManualAcknowledgement`. `id`, `version` e `seed` são strings não
 vazias; `lotteryId = "lotofacil"`; `betSize` é inteiro 16–20; e
 `requiresManualAcknowledgement = false`.
+
+Esses são os domínios do request aceito; a validação em etapas da seção 7.1
+preserva os códigos específicos. `strategy.betSize` numérico não inteiro,
+incluindo 15.5 e 16.5, é erro de request; inteiro fora de 16..20 é erro de
+tamanho. Ambos falham antes de executar combinatória ou emitir progresso.
 
 `parameters.seed` é a seed efetivamente consumida pelo PRNG, preservando a
 semântica v1. `strategy.seed` permanece como proveniência da configuração
@@ -224,11 +229,11 @@ dois shapes de `structuralAllocation` e `structuralCounts`:
     numbers: [exactly betSize unique, strictly increasing integers in 1..25]
   }],
   execution: {
-    visitedRanks,
-    universeSize,
-    selectedCount,
+    visitedRanks: safe integer 0..universeSize,
+    universeSize: safe integer exactly C(25, betSize),
+    selectedCount: safe integer 0..min(candidateCount, visitedRanks),
     structuralAllocation: null | exact five-key percentage object,
-    structuralCounts: null | exact five-band integer object,
+    structuralCounts: null | exact five-band non-negative safe-integer object,
     timeoutApplied: false
   },
   transient: true,
@@ -249,6 +254,8 @@ candidatos únicos, `selectedCount = candidateCount` e
 Para cada candidato, `numbers.length === betSize`; o resultado satisfaz
 `candidates.length === candidateCount`, sem candidatos duplicados. Esses
 invariantes são verificados conjuntamente com o request antes da publicação.
+Os limites completos dos contadores e sua reconciliação seguem 3.5;
+no sucesso, `selectedCount = candidateCount = candidates.length`.
 
 A ordem v2 é a comparação lexicográfica numérica das dezenas canônicas,
 elemento a elemento. Ela não reutiliza nem modifica
@@ -264,6 +271,55 @@ concluir a seleção, preservando o conjunto, as quantidades e as alocações;
 não usar `localeCompare` ou `Intl.Collator`. Mantém-se
 `candidateOrderingVersion = "lotofacil-numeric-lexicographic-canonical-games/1.0.0"`.
 As ordenações e os resultados das Stories 4.9 e 4.10 permanecem preservados.
+
+### 3.5 Contadores: schema isolado, sequência e request
+
+As mesmas regras aplicam-se ao request aceito, aos eventos de progresso e
+ao resultado. Todos os campos de contagem são inteiros seguros JavaScript
+(`Number.isSafeInteger`), com estes limites:
+
+| Campo | Limite ou relação |
+| --- | --- |
+| `candidateCount` | `1 <= candidateCount <= min(10000, C(25, betSize))` |
+| `universeSize` | `universeSize = C(25, betSize)` |
+| `visitedRanks` | `0 <= visitedRanks <= universeSize` |
+| `selectedCount` | `0 <= selectedCount <= min(candidateCount, visitedRanks)` |
+| Cada valor de `structuralCounts` em `ADVANCED` | Inteiro seguro não negativo, no máximo sua quantidade-alvo |
+
+Em `ADVANCED`, `structuralCounts` tem exatamente as cinco faixas da seção 3.2,
+sem chaves extras ou ausentes; a soma de seus valores é `selectedCount`.
+As quantidades-alvo são as calculadas por `lotofacil-largest-remainder/1.0.0`
+para o request validado, sem alterar o algoritmo. Em `NEUTRAL`, o campo é
+sempre `null`.
+
+Separar três níveis de validação, sem tratar um evento isolado como prova de
+uma execução válida:
+
+1. **Objeto isolado:** schemas estritos conferem tipos, campos, limites e
+   relações entre campos disponíveis no próprio objeto. Progresso contém
+   `betSize`/`candidateCount`; no resultado, a contagem está em
+   `parameters.candidateCount`. Conferir universo exato, limites dos contadores,
+   shape por modo e soma das faixas. Um evento `FINALIZE_RESULT` exige
+   `selectedCount = candidateCount`; um resultado de sucesso exige também
+   `selectedCount = candidateCount = candidates.length`.
+2. **Entre eventos da mesma execução:** o primeiro evento é
+   `SELECT_CANDIDATES` com `visitedRanks = selectedCount = 0`. `visitedRanks`,
+   `selectedCount` e cada contagem de faixa são monotônicos não decrescentes;
+   `candidateCount` e `universeSize` permanecem constantes. `FINALIZE_RESULT`
+   só ocorre com seleção completa, no máximo uma vez, sem se tornar terminal
+   ou confirmar publicação. Valores individualmente válidos não autorizam
+   regressão de contador nem troca de identidade entre eventos.
+3. **Conjunto com o request:** conferir identidade, modo, tamanho, contagem,
+   política e alocação contra o request validado. Em `ADVANCED`, nenhuma faixa
+   supera sua quantidade-alvo em qualquer evento/resultado; no resultado final,
+   cada faixa é exatamente igual ao alvo. Conferir também que as contagens
+   finais correspondem à classificação dos candidatos efetivamente retornados.
+   O progresso isolado não contém a alocação do request e não pode, sozinho,
+   comprovar esses alvos. `NEUTRAL` preserva `structuralCounts: null`.
+
+A ordem do preflight continua sendo 7.1: estes limites não antecipam
+`C(25, betSize)` à rejeição de tamanho inválido nem convertem excesso de
+`candidateCount` em erro genérico de schema.
 
 ## 4. Algoritmo determinístico
 
@@ -375,11 +431,11 @@ O schema estrito de progresso possui exatamente:
   phase: "SELECT_CANDIDATES" | "FINALIZE_RESULT",
   betSize: integer 16..20,
   mode: "NEUTRAL" | "ADVANCED",
-  visitedRanks,
-  universeSize,
-  selectedCount,
-  candidateCount,
-  structuralCounts: null | exact five-band integer object
+  visitedRanks: safe integer 0..universeSize,
+  universeSize: safe integer exactly C(25, betSize),
+  selectedCount: safe integer 0..min(candidateCount, visitedRanks),
+  candidateCount: safe integer 1..min(10000, C(25, betSize)),
+  structuralCounts: null | exact five-band non-negative safe-integer object
 }
 ```
 
@@ -390,6 +446,8 @@ após concluir a seleção e ao entrar na finalização. Erro ou cancelamento an
 dessa etapa permite zero emissões. O evento não é terminal e não confirma
 validação, publicação ou sucesso; em `NEUTRAL`,
 `structuralCounts` é sempre `null`; em `ADVANCED`, contém as cinco faixas.
+Aplicar os três níveis de validação e os limites de 3.5: um schema de evento
+isolado não substitui a verificação da sequência nem a comparação com o request.
 
 `SELECT_CANDIDATES` e `FINALIZE_RESULT` são fases anteriores à publicação;
 nenhuma delas muda sua fronteira. A seção 6.1 é a única definição normativa
@@ -607,21 +665,25 @@ Retornar somente o erro da primeira etapa inválida, nesta ordem fixa:
 A validação estrutural verifica campos ausentes/desconhecidos, tipos e shapes.
 Também pertencem ao erro de request suas regras de boa formação: literais
 fixos do envelope/definição, seeds com 1..1024 unidades UTF-16, formato de
-hashes, percentuais válidos e contagem inteira segura positiva. A validação semântica subsequente
+hashes, percentuais válidos, `strategy.betSize` inteiro e contagem inteira
+segura positiva. A validação semântica subsequente
 verifica os domínios de tamanho/modo, o teto, a referência da política e a
 viabilidade da alocação, cada qual com seu código específico.
 
 | Ordem | Validação | Código público |
 | --- | --- | --- |
-| 1 | Estrutura/schema: campos ausentes/desconhecidos, tipos, literais fixos, seeds vazias ou acima de 1024 unidades UTF-16, formato dos hashes e shape do ramo reconhecido; contagem não inteira segura positiva; alocação com chaves/percentuais/soma inválidos | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| 1 | Estrutura/schema: campos ausentes/desconhecidos, tipos, `strategy.betSize` numérico não inteiro, literais fixos, seeds vazias ou acima de 1024 unidades UTF-16, formato dos hashes e shape do ramo reconhecido; contagem não inteira segura positiva; alocação com chaves/percentuais/soma inválidos | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
 | 2 | `strategy.betSize` inteiro fora de 16–20 | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
 | 3 | `strategy.mode` string fora de `NEUTRAL`/`ADVANCED` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
 | 4 | Contagem positiva acima de `min(10000, C(25, betSize))` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
 | 5 | Identidade/versões/hashes de política divergentes do artefato ou `policy.betSize` diferente de `strategy.betSize` | `LOTOFACIL_STRUCTURAL_POLICY_MISMATCH` |
 | 6 | Quantidades por maiores restos excedem as massas disponíveis | `LOTOFACIL_STRUCTURAL_ALLOCATION_INFEASIBLE` |
 
-Na etapa 1, os valores de tamanho e modo são verificados quanto ao tipo; seus
-domínios são reservados às etapas 2–3. Não aplicar antes delas um enum de modo
+Na etapa 1, os valores de tamanho e modo são verificados quanto ao tipo, e
+`strategy.betSize` também deve ser inteiro: 15.5 e 16.5 usam erro de request.
+Inteiros fora de 16..20 usam o erro específico de tamanho na etapa 2; não
+executar combinatória nem emitir progresso antes dessas rejeições.
+Os domínios de tamanho/modo são reservados às etapas 2–3. Não aplicar antes delas um enum de modo
 ou refinamento 16–20 que converta todo valor não suportado em erro genérico.
 Assim, inteiro `15` em v2 chega ao erro de tamanho e string `"UNSUPPORTED"`
 chega ao erro de modo quando não existir violação anterior. Para modo
@@ -834,6 +896,8 @@ fixture 4.11. Cada linha altera somente os campos indicados. `policyId =
 | Alterações simultâneas | Código esperado |
 | --- | --- |
 | Adicionar campo de topo `extra`; `strategy.betSize = 15` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| `strategy.betSize = 15.5` ou `16.5` (casos separados, isolados) | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
+| `strategy.betSize = 15.5` ou `16.5`; `strategy.mode = "UNSUPPORTED"`; `candidateCount = 10001` | `INVALID_PORTFOLIO_GENERATION_V2_REQUEST` |
 | `strategy.betSize = 15`; `strategy.mode = "UNSUPPORTED"` | `UNSUPPORTED_LOTOFACIL_BET_SIZE` |
 | `strategy.mode = "UNSUPPORTED"`; `candidateCount = 10001` | `UNSUPPORTED_LOTOFACIL_GENERATION_MODE` |
 | `candidateCount = 10001`; `policySetReference.policy.policyId = "inexistente"` | `LOTOFACIL_CANDIDATE_COUNT_LIMIT_EXCEEDED` |
@@ -853,6 +917,9 @@ normativo no vetor com `candidateCount = 3173`, o erro esperado passa a
 Permutar a ordem das propriedades JSON em todos os níveis deve preservar
 código, mensagem canônica correspondente da seção 7, exit `1` e ausência de
 progresso/stdout em cada caso.
+Para os vetores de tamanho inválido, comprovar zero chamadas à combinatória
+e zero progresso. Repetir os fracionários com sinal previamente abortado:
+o erro de request prevalece, conforme 6.2.
 
 ### 11.2 Evidência e vetores de fronteira da alocação
 
@@ -884,6 +951,34 @@ vizinhos representáveis de `S` de cada lado da fronteira; não usar epsilon
 extra nem arredondar a soma. Testar também que a entrada não é mutada e os
 percentuais registrados no resultado são os recebidos, mesmo quando `S != 100`;
 as cotas seguem `p_i * candidateCount / 100`, sem renormalização.
+
+### 11.3 Vetores dos contadores
+
+Planejar os casos abaixo em progresso e resultado, conforme 3.5, mantendo
+válidos os demais campos e separando cada nível de validação:
+
+- **Schemas isolados:** aceitar limites inclusivos e inteiros seguros válidos;
+  rejeitar `-1`, `0.5` e `Number.MAX_SAFE_INTEGER + 1` em cada campo de contagem,
+  inclusive cada faixa de `ADVANCED`. Rejeitar `candidateCount = 0`/`10001`,
+  universo diferente de `C(25, betSize)`, visitas acima do universo e
+  `selectedCount` acima de visitas ou de `candidateCount`.
+- **Shapes/soma:** `NEUTRAL` aceita somente `structuralCounts: null`;
+  `ADVANCED` exige exatamente as cinco faixas e soma igual a `selectedCount`.
+  Rejeitar chave extra/ausente e soma divergente mesmo com valores válidos.
+- **Sequência:** aceitar início com ambos os contadores em zero e séries
+  monotônicas; rejeitar regressão de visitas, selecionados ou faixa mesmo
+  quando cada evento isolado for válido. Rejeitar mudança de contagem/universo
+  entre eventos; `FINALIZE_RESULT` exige seleção completa, sem sucesso implícito.
+- **Conjunto com request:** rejeitar divergência de contagem/tamanho/modo,
+  faixa acima do alvo ou resultado final que não iguala cada alvo. Rejeitar
+  `selectedCount != candidateCount` ou `candidateCount != candidates.length`
+  no sucesso e faixas divergentes da classificação dos candidatos. Alvos
+  derivam sempre do request validado, não de dados autodeclarados pelo evento.
+
+Violações de progresso/resultado geradas internamente seguem o erro genérico
+de resultado de 7.1, sem disponibilizar resultado ou publicar JSON final.
+Para request inválido, preservar separadamente os códigos de preflight de
+7.1/11.1; nenhum teste de schema de saída altera essa precedência.
 
 ## 12. Dependências e gates
 
